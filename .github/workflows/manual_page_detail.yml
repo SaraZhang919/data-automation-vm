@@ -1,0 +1,70 @@
+name: Manual Page Detail
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Start date (YYYY-MM-DD)"
+        required: true
+      end_date:
+        description: "End date (YYYY-MM-DD)"
+        required: true
+      page_name:
+        description: "Page name to filter (e.g. Home, About, Pricing)"
+        required: true
+      url_filter:
+        description: "Optional: narrow to one specific URL (leave blank for all matching URLs)"
+        required: false
+        default: ""
+      data_source:
+        description: "Which data to pull"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - ga4_only
+          - gsc_only
+
+jobs:
+  manual-page-detail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Manual Page Detail GA4
+        if: ${{ github.event.inputs.data_source == 'both' || github.event.inputs.data_source == 'ga4_only' }}
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+        run: |
+          python scripts/manual_page_detail_ga4.py \
+            --start "${{ github.event.inputs.start_date }}" \
+            --end "${{ github.event.inputs.end_date }}" \
+            --page_name "${{ github.event.inputs.page_name }}" \
+            --url_filter "${{ github.event.inputs.url_filter }}"
+
+      - name: Run Manual Page Detail GSC
+        if: ${{ github.event.inputs.data_source == 'both' || github.event.inputs.data_source == 'gsc_only' }}
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+        run: |
+          python scripts/manual_page_detail_gsc.py \
+            --start "${{ github.event.inputs.start_date }}" \
+            --end "${{ github.event.inputs.end_date }}" \
+            --page_name "${{ github.event.inputs.page_name }}" \
+            --url_filter "${{ github.event.inputs.url_filter }}"
