@@ -1,6 +1,6 @@
 """
 manual_page_detail_ga4.py — Pull GA4 data for a specific page name across all subdomains.
-Shows daily breakdown + summary row per URL.
+Shows daily breakdown per URL.
 Accepts --start, --end, --page_name, and optional --url_filter.
 Writes to "Manual page detail - GA4" sheet tab.
 """
@@ -19,7 +19,7 @@ import thresholds
 TAB_NAME = "Manual page detail - GA4"
 
 HEADERS = [
-    "Row Type",       # "Daily" or "Summary"
+    "Row Type",       # "Daily"
     "Date",
     "Lan", "Subdomain", "Page Type", "Page Name", "Page Url",
     "All channel Sessions", "All channel Active Users",
@@ -140,27 +140,6 @@ def get_daily_metrics(ga4, property_id, start: date, end: date, page_path: str, 
     return results
 
 
-def summarise(daily_rows):
-    """Aggregate daily rows into a summary dict."""
-    if not daily_rows:
-        return None
-    total_all_s = sum(r["all_sessions"] for r in daily_rows)
-    total_all_u = sum(r["all_users"] for r in daily_rows)
-    total_org_s = sum(r["org_sessions"] for r in daily_rows)
-    total_org_u = sum(r["org_users"] for r in daily_rows)
-    total_new_u = sum(r["new_users"] for r in daily_rows)
-    total_key_e = sum(r["key_events"] for r in daily_rows)
-    avg_engage  = round(sum(r["engagement_rate"] for r in daily_rows) / len(daily_rows), 2)
-    avg_dur     = round(sum(r["avg_duration"] for r in daily_rows) / len(daily_rows), 1)
-    ctr         = round(total_key_e / total_org_u, 4) if total_org_u > 0 else 0
-    return {
-        "all_sessions": total_all_s, "all_users": total_all_u,
-        "org_sessions": total_org_s, "org_users": total_org_u,
-        "new_users": total_new_u, "engagement_rate": avg_engage,
-        "avg_duration": avg_dur, "key_events": total_key_e, "ctr": ctr,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -215,8 +194,7 @@ def main():
 
     print(f"Found {len(matched_urls)} URL(s) matching '{args.page_name}'")
 
-    all_new_rows  = []
-    highlight_ops = []
+    all_new_rows = []
 
     for url, info in matched_urls.items():
         subdomain = info["subdomain"]
@@ -226,11 +204,7 @@ def main():
 
         print(f"  [{info['lan']}] Fetching daily data for {url} …")
         daily = get_daily_metrics(ga4, pid, cur_start, cur_end, path, subdomain)
-        summary = summarise(daily)
 
-        date_label = f"{cur_start} to {cur_end}"
-
-        # --- Daily rows ---
         for day in daily:
             row = [
                 "Daily",
@@ -242,23 +216,6 @@ def main():
                 day["avg_duration"], day["key_events"], day["ctr"],
             ]
             all_new_rows.append(row)
-
-        # --- Summary row ---
-        if summary:
-            sum_row_index = len(all_new_rows)  # 0-based, header is row 0
-            summary_row = [
-                "Summary",
-                date_label,
-                info["lan"], subdomain, info["page_type"], info["page_name"], url,
-                summary["all_sessions"], summary["all_users"],
-                summary["org_sessions"], summary["org_users"],
-                summary["new_users"], summary["engagement_rate"],
-                summary["avg_duration"], summary["key_events"], summary["ctr"],
-            ]
-            all_new_rows.append(summary_row)
-
-        # Blank separator row between URLs
-        all_new_rows.append([""] * len(HEADERS))
 
     append_rows(sheets, TAB_NAME, all_new_rows)
     print(f"Manual Page Detail GA4 complete. {len(all_new_rows)} rows written.")
