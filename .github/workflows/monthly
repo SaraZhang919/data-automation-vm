@@ -1,0 +1,74 @@
+name: Monthly
+
+on:
+  schedule:
+    - cron: "0 7 4 * *"   # 4 PM JST (UTC+9) on the 4th of every month
+  workflow_dispatch:
+    inputs:
+      run_date:
+        description: "Reference date (YYYY-MM-DD). Use the 4th of a past month to test."
+        required: false
+        default: ""
+
+jobs:
+  monthly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write Google credentials
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          echo "$GOOGLE_CREDENTIALS" > /tmp/service_account.json
+
+      - name: Run 4-week site GA4
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/service_account.json
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          RUN_DATE: ${{ github.event.inputs.run_date }}
+        run: |
+          if [ -n "$RUN_DATE" ]; then
+            python scripts/monthly_site_ga4.py "$RUN_DATE"
+          else
+            python scripts/monthly_site_ga4.py
+          fi
+
+      - name: Run 4-week page GA4
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/service_account.json
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          RUN_DATE: ${{ github.event.inputs.run_date }}
+        run: |
+          if [ -n "$RUN_DATE" ]; then
+            python scripts/monthly_page_ga4.py "$RUN_DATE"
+          else
+            python scripts/monthly_page_ga4.py
+          fi
+
+      - name: Run 4-week page GSC
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/service_account.json
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          RUN_DATE: ${{ github.event.inputs.run_date }}
+        run: |
+          if [ -n "$RUN_DATE" ]; then
+            python scripts/monthly_page_gsc.py "$RUN_DATE"
+          else
+            python scripts/monthly_page_gsc.py
+          fi
+
+      - name: Clean up credentials
+        if: always()
+        run: rm -f /tmp/service_account.json
