@@ -1,6 +1,6 @@
 """
 manual_page_detail_gsc.py — Pull GSC data for a specific page name across all subdomains.
-Shows daily breakdown + summary row per URL.
+Shows daily breakdown per URL.
 Accepts --start, --end, --page_name, and optional --url_filter.
 Writes to "Manual page detail - GSC" sheet tab.
 """
@@ -15,7 +15,7 @@ import thresholds
 TAB_NAME = "Manual page detail - GSC"
 
 HEADERS = [
-    "Row Type",       # "Daily" or "Summary"
+    "Row Type",       # "Daily"
     "Date",
     "Lan", "Subdomain", "Page Type", "Page Name", "Page Url",
     "Clicks", "Impressions", "CTR %", "Position",
@@ -84,28 +84,6 @@ def fetch_gsc_daily(gsc, gsc_property: str, url: str, start: date, end: date):
     return results
 
 
-def summarise(daily_rows):
-    """Aggregate daily rows into a summary dict."""
-    if not daily_rows:
-        return None
-    total_clicks = sum(r["clicks"] for r in daily_rows)
-    total_imps   = sum(r["impressions"] for r in daily_rows)
-    avg_ctr      = round(sum(r["ctr"] for r in daily_rows) / len(daily_rows), 2)
-    avg_pos      = round(sum(r["position"] for r in daily_rows) / len(daily_rows), 1)
-
-    combo_alert = ""
-    if total_imps > 1000 and avg_ctr < 2.0:
-        combo_alert = "High Imp / Low CTR"
-
-    return {
-        "clicks": total_clicks,
-        "impressions": total_imps,
-        "ctr": avg_ctr,
-        "position": avg_pos,
-        "alert": combo_alert,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -163,12 +141,8 @@ def main():
 
     for url, info in matched_urls.items():
         print(f"  [{info['lan']}] Fetching daily GSC data for {url} …")
-        daily   = fetch_gsc_daily(gsc, info["gsc_property"], url, cur_start, cur_end)
-        summary = summarise(daily)
+        daily = fetch_gsc_daily(gsc, info["gsc_property"], url, cur_start, cur_end)
 
-        date_label = f"{cur_start} to {cur_end}"
-
-        # --- Daily rows ---
         for day in daily:
             row = [
                 "Daily",
@@ -179,22 +153,6 @@ def main():
                 day["alert"],
             ]
             all_new_rows.append(row)
-
-        # --- Summary row ---
-        if summary:
-            summary_row = [
-                "Summary",
-                date_label,
-                info["lan"], info["subdomain"],
-                info["page_type"], info["page_name"], url,
-                summary["clicks"], summary["impressions"],
-                summary["ctr"], summary["position"],
-                summary["alert"],
-            ]
-            all_new_rows.append(summary_row)
-
-        # Blank separator row between URLs
-        all_new_rows.append([""] * len(HEADERS))
 
     append_rows(sheets, TAB_NAME, all_new_rows)
     print(f"Manual Page Detail GSC complete. {len(all_new_rows)} rows written.")
