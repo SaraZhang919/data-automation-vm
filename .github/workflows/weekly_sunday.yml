@@ -40,7 +40,7 @@ jobs:
           RUN_DATE: ${{ github.event.inputs.run_date }}
         run: |
           if [ -n "$RUN_DATE" ]; then
-            python scripts/weekly_site_ga4.py "$RUN_DATE"
+            python scripts/weekly_site_ga4.py --date "$RUN_DATE"
           else
             python scripts/weekly_site_ga4.py
           fi
