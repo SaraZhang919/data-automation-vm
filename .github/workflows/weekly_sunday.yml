@@ -33,9 +33,9 @@ jobs:
         run: |
           echo "$GOOGLE_CREDENTIALS" > /tmp/service_account.json
 
-      - name: Run weekly site GA4
+- name: Run weekly site GA4
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: /tmp/service_account.json
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
           RUN_DATE: ${{ github.event.inputs.run_date }}
         run: |
