@@ -2,6 +2,8 @@
 manual_page_detail_gsc.py — Pull GSC data for a specific page name across all subdomains.
 Shows daily breakdown per URL.
 Accepts --start, --end, --page_name, and optional --url_filter.
+Both --page_name and --url_filter support pipe-separated values (OR logic).
+  e.g. --page_name "Home|Online Tool"  --url_filter "/home|/tool"
 Writes to "Manual page detail - GSC" sheet tab.
 """
 
@@ -98,11 +100,13 @@ def main():
 
     cur_start = date.fromisoformat(args.start)
     cur_end   = date.fromisoformat(args.end)
-    page_name_filter = args.page_name.strip().lower()
-    url_filter = args.url_filter.strip()
+
+    # Support pipe-separated values for both filters (OR logic)
+    page_name_filters = [v.strip().lower() for v in args.page_name.split("|") if v.strip()]
+    url_filters       = [v.strip() for v in args.url_filter.split("|") if v.strip()]
 
     print(f"Running Manual Page Detail GSC | {cur_start} to {cur_end} | page: '{args.page_name}'"
-          + (f" | url: {url_filter}" if url_filter else ""))
+          + (f" | url: {args.url_filter}" if url_filters else ""))
 
     gsc    = get_gsc_client()
     sheets = get_sheets_client()
@@ -114,9 +118,9 @@ def main():
     matched_urls = {}   # url -> {page_type, page_name, lan, subdomain, gsc_property}
 
     for url, info in page_map.items():
-        if info["page_name"].strip().lower() != page_name_filter:
+        if info["page_name"].strip().lower() not in page_name_filters:
             continue
-        if url_filter and url != url_filter:
+        if url_filters and not any(f in url for f in url_filters):
             continue
         for prop in PROPERTIES:
             if prop["lan"] == info["lan"] or prop["subdomain"] in url:
@@ -131,7 +135,7 @@ def main():
 
     if not matched_urls:
         print(f"No URLs found for page name '{args.page_name}'"
-              + (f" and url '{url_filter}'" if url_filter else "")
+              + (f" and url filter '{args.url_filter}'" if url_filters else "")
               + ". Check the 'Page name - manual management' sheet.")
         return
 
