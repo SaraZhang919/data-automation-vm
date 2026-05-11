@@ -40,14 +40,17 @@ COL_SOC_USERS = 14
 COL_PAID_USERS = 16
 
 
-def get_week_range(ref_sunday):
-    """Return (start, end) for the week Sunday..Saturday containing ref_sunday."""
-    start = ref_sunday - timedelta(days=ref_sunday.weekday() + 1)
-    # If ref_sunday is already a Sunday (weekday=6), adjust
-    dow = ref_sunday.weekday()  # Mon=0, Sun=6
-    days_since_sunday = (dow + 1) % 7
-    start = ref_sunday - timedelta(days=days_since_sunday)
-    end = start + timedelta(days=6)
+def get_week_range(ref_date):
+    """
+    Return (start, end) for the most recent complete Sun–Sat week before ref_date.
+    Sunday 2026-05-10 → 2026-05-03 to 2026-05-09.
+    """
+    dow = ref_date.weekday()  # Mon=0 ... Sat=5, Sun=6
+    days_back_to_sat = (dow - 5) % 7
+    if days_back_to_sat == 0:
+        days_back_to_sat = 7
+    end = ref_date - timedelta(days=days_back_to_sat)
+    start = end - timedelta(days=6)
     return start, end
 
 
