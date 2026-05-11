@@ -23,10 +23,16 @@ COL_CTR_CHANGE = 7
 COL_POS_CHANGE = 9
 
 
-def get_week_range(ref_tuesday):
-    dow = ref_tuesday.weekday()
-    days_since_sunday = (dow + 1) % 7
-    end = ref_tuesday - timedelta(days=days_since_sunday + 1)
+def get_week_range(ref_date):
+    """
+    Return (start, end) for the most recent complete Sun–Sat week before ref_date.
+    Tuesday 2026-05-12 → 2026-05-03 to 2026-05-09.
+    """
+    dow = ref_date.weekday()  # Mon=0 ... Sat=5, Sun=6
+    days_back_to_sat = (dow - 5) % 7
+    if days_back_to_sat == 0:
+        days_back_to_sat = 7
+    end = ref_date - timedelta(days=days_back_to_sat)
     start = end - timedelta(days=6)
     return start, end
 
