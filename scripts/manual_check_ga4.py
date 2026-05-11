@@ -1,6 +1,10 @@
 """
 manual_check_ga4.py — Pull GA4 data by page for a custom date range.
 Same metrics as weekly_page_ga4.py but accepts --start and --end dates.
+Optionally filter by pipe-separated page names or URL substrings.
+  --page_names "homepage|onlinetool"   matches Page Name column (case-insensitive)
+  --url_filter "/home|/tool"           matches URL substring (case-insensitive)
+  Both filters use OR logic. If neither is set, all pages are included.
 Writes to "Manual check - GA4" sheet tab (never overwrites automated data).
 """
 
@@ -11,7 +15,7 @@ from google.analytics.data_v1beta.types import (
     FilterExpression, Filter, FilterExpressionList, OrderBy
 )
 from auth import get_ga4_client, get_sheets_client
-from config import PROPERTIES, SHEET_NAMES, GA4_CHANNEL_DIM, TOP_PAGES_COUNT
+from config import PROPERTIES, GA4_CHANNEL_DIM, TOP_PAGES_COUNT
 from config import CHANNEL_ORGANIC_SEARCH
 from sheets import ensure_headers, append_rows, read_all_rows, read_page_name_map, batch_highlight
 import thresholds
@@ -26,13 +30,36 @@ HEADERS = [
     "Average session duration", "Key Event Counts", "CTR"
 ]
 
-TAB_KEY = "manual_check_ga4"
 TAB_NAME = "Manual check - GA4"
 
 COL_ALL_USERS_CHANGE = 8
 COL_ORG_USERS_CHANGE = 11
 COL_ENGAGE = 13
 COL_KEY_EVENTS = 15
+
+
+def parse_pipe(value):
+    """Split pipe-separated input into a list of stripped lowercase values. Empty → []."""
+    if not value:
+        return []
+    return [v.strip().lower() for v in value.split("|") if v.strip()]
+
+
+def url_matches_filters(url, page_name, page_name_filters, url_filters):
+    """
+    Return True if this URL/page should be included.
+    - No filters set → include everything.
+    - page_name_filters → page_name must match one (case-insensitive).
+    - url_filters → URL must contain one of the substrings (case-insensitive).
+    - Both set → either match qualifies (OR logic).
+    """
+    if not page_name_filters and not url_filters:
+        return True
+    if page_name_filters and page_name.lower() in page_name_filters:
+        return True
+    if url_filters and any(f in url.lower() for f in url_filters):
+        return True
+    return False
 
 
 def channel_filter(channel_value):
@@ -87,7 +114,6 @@ def get_page_metrics(ga4, property_id, start, end, page_path, subdomain):
         )
     )
 
-    # All channel metrics
     req_all = RunReportRequest(
         property=f"properties/{property_id}",
         date_ranges=[date_range],
@@ -101,7 +127,6 @@ def get_page_metrics(ga4, property_id, start, end, page_path, subdomain):
         all_s = int(resp_all.rows[0].metric_values[0].value)
         all_u = int(resp_all.rows[0].metric_values[1].value)
 
-    # Organic metrics
     req_org = RunReportRequest(
         property=f"properties/{property_id}",
         date_ranges=[date_range],
@@ -128,7 +153,6 @@ def get_page_metrics(ga4, property_id, start, end, page_path, subdomain):
         key_e = int(v[5].value)
 
     ctr = round(key_e / org_u, 4) if org_u > 0 else 0
-
     return {
         "url": full_url,
         "all_sessions": all_s, "all_users": all_u,
@@ -162,41 +186,54 @@ def get_prev_metrics_from_sheet(rows, url):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--start", required=True, help="Start date YYYY-MM-DD")
-    parser.add_argument("--end", required=True, help="End date YYYY-MM-DD")
+    parser.add_argument("--end",   required=True, help="End date YYYY-MM-DD")
+    parser.add_argument("--page_names", default="",
+                        help="Pipe-separated page names, e.g. homepage|onlinetool")
+    parser.add_argument("--url_filter", default="",
+                        help="Pipe-separated URL substrings, e.g. /home|/tool")
     args = parser.parse_args()
 
-    cur_start = date.fromisoformat(args.start)
-    cur_end = date.fromisoformat(args.end)
-    span = (cur_end - cur_start).days + 1
-    prev_start = cur_start - timedelta(days=span)
-    prev_end = cur_end - timedelta(days=span)
-    date_label = f"{cur_start} to {cur_end}"
-    print(f"Running Manual Check GA4 for {date_label}")
+    page_name_filters = parse_pipe(args.page_names)
+    url_filters       = parse_pipe(args.url_filter)
 
-    ga4 = get_ga4_client()
+    filter_desc = ""
+    if page_name_filters: filter_desc += f" | pages: {page_name_filters}"
+    if url_filters:       filter_desc += f" | urls: {url_filters}"
+
+    cur_start  = date.fromisoformat(args.start)
+    cur_end    = date.fromisoformat(args.end)
+    span       = (cur_end - cur_start).days + 1
+    prev_start = cur_start - timedelta(days=span)
+    prev_end   = cur_end   - timedelta(days=span)
+    date_label = f"{cur_start} to {cur_end}"
+    print(f"Running Manual Check GA4 for {date_label}{filter_desc}")
+
+    ga4    = get_ga4_client()
     sheets = get_sheets_client()
 
-    # Use tab name directly since it's a new manual tab
     tab = TAB_NAME
     ensure_headers(sheets, tab, HEADERS)
 
-    page_map = read_page_name_map(sheets)
+    page_map      = read_page_name_map(sheets)
     existing_rows = read_all_rows(sheets, tab)
 
-    all_new_rows = []
+    all_new_rows  = []
     highlight_ops = []
 
     for prop in PROPERTIES:
         print(f"  Fetching pages for {prop['subdomain']}...")
-        pid = prop["ga4"]
+        pid       = prop["ga4"]
         subdomain = prop["subdomain"]
-        base_url = f"https://{subdomain}"
+        base_url  = f"https://{subdomain}"
 
-        top_paths = get_top_pages(ga4, pid, cur_start, cur_end)
+        # Only hit the API for top-30 when no filter is active (saves quota)
         top_urls = set()
-        for p in top_paths:
-            top_urls.add(base_url + p if p.startswith("/") else p)
+        if not page_name_filters and not url_filters:
+            top_paths = get_top_pages(ga4, pid, cur_start, cur_end)
+            for p in top_paths:
+                top_urls.add(base_url + p if p.startswith("/") else p)
 
+        # URLs from the Page name sheet for this subdomain
         manual_urls = set()
         for url, info in page_map.items():
             if info["lan"] == prop["lan"] or subdomain in url:
@@ -204,24 +241,36 @@ def main():
 
         all_urls = list(top_urls | manual_urls)
 
+        # Apply filters
+        filtered_urls = []
         for url in all_urls:
-            path = url.replace(base_url, "") or "/"
+            pinfo = page_map.get(url, {})
+            pname = pinfo.get("page_name", "")
+            if url_matches_filters(url, pname, page_name_filters, url_filters):
+                filtered_urls.append(url)
+
+        if not filtered_urls:
+            print(f"    No matching pages — skipping.")
+            continue
+
+        for url in filtered_urls:
+            path    = url.replace(base_url, "") or "/"
             metrics = get_page_metrics(ga4, pid, cur_start, cur_end, path, subdomain)
 
             prev = get_prev_metrics_from_sheet(existing_rows, url)
             if prev is None:
                 prev_m = get_page_metrics(ga4, pid, prev_start, prev_end, path, subdomain)
                 prev = {
-                    "all_users": prev_m["all_users"],
-                    "org_users": prev_m["org_users"],
+                    "all_users":       prev_m["all_users"],
+                    "org_users":       prev_m["org_users"],
                     "engagement_rate": prev_m["engagement_rate"],
-                    "key_events": prev_m["key_events"],
+                    "key_events":      prev_m["key_events"],
                 }
 
             all_change = metrics["all_users"] - prev["all_users"]
             org_change = metrics["org_users"] - prev["org_users"]
 
-            pinfo = page_map.get(url, {})
+            pinfo     = page_map.get(url, {})
             page_type = pinfo.get("page_type", "")
             page_name = pinfo.get("page_name", "")
 
@@ -242,8 +291,7 @@ def main():
             if lvl: highlight_ops.append((row_index, COL_ORG_USERS_CHANGE, lvl))
 
             lvl = thresholds.weekly_page_engagement_ratio(
-                metrics["engagement_rate"], prev["engagement_rate"],
-                metrics["org_sessions"]
+                metrics["engagement_rate"], prev["engagement_rate"], metrics["org_sessions"]
             )
             if lvl: highlight_ops.append((row_index, COL_ENGAGE, lvl))
 
