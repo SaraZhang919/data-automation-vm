@@ -2,7 +2,7 @@
 monthly_site_ga4.py — Pull GA4 monthly site-level data per subdomain.
 Date range: 1st to last day of previous month.
 Schedule: 4th of month at 4PM JST.
-Includes DAU/MAU stickiness metric.
+Includes DAU/MAU stickiness for all channels and organic search.
 """
 
 import argparse
@@ -21,21 +21,22 @@ HEADERS = [
     "Date", "Lan", "Subdomain",
     "All channel Sessions", "All channel Active Users (MAU)",
     "All channel Active Users Change Value", "Major Change Contribution channel",
-    "Organic Channel sessions", "Organic channel active users",
+    "Organic Channel sessions", "Organic channel active users (MAU)",
     "Organic channel active users Change Value",
     "Direct Channel Active User", "Direct Change Value",
     "Referral Channel Active User", "Referral Change",
     "Organic Social channel Active user", "Organic Social change",
     "Paid Ads channel active user", "Paid Ads change",
-    "Sum DAU (All)", "Avg DAU (All)", "DAU/MAU %",
+    "Sum DAU (All)", "DAU/MAU % (All)",
+    "Sum DAU (Organic)", "DAU/MAU % (Organic)",
 ]
 
-COL_SUBDOMAIN = 2
-COL_ALL_USERS = 4
-COL_ORG_USERS = 8
-COL_DIR_USERS = 10
-COL_REF_USERS = 12
-COL_SOC_USERS = 14
+COL_SUBDOMAIN  = 2
+COL_ALL_USERS  = 4
+COL_ORG_USERS  = 8
+COL_DIR_USERS  = 10
+COL_REF_USERS  = 12
+COL_SOC_USERS  = 14
 COL_PAID_USERS = 16
 
 
@@ -65,8 +66,8 @@ def channel_filter(channel_value):
 
 def run_report(ga4, property_id, start, end, dimension_filter=None):
     """
-    Query GA4 for sessions + active users over a date range.
-    No date dimension — GA4 deduplicates active users correctly across the full period.
+    Query GA4 without date dimension — GA4 deduplicates active users
+    correctly across the full period (MAU).
     """
     req = RunReportRequest(
         property=f"properties/{property_id}",
@@ -74,7 +75,7 @@ def run_report(ga4, property_id, start, end, dimension_filter=None):
             start_date=start.strftime("%Y-%m-%d"),
             end_date=end.strftime("%Y-%m-%d")
         )],
-        dimensions=[],  # No date dimension — deduplicates active users correctly
+        dimensions=[],
         metrics=[Metric(name="sessions"), Metric(name="activeUsers")],
         dimension_filter=dimension_filter,
     )
@@ -87,10 +88,11 @@ def run_report(ga4, property_id, start, end, dimension_filter=None):
     return 0, 0
 
 
-def run_daily_report(ga4, property_id, start, end, dimension_filter=None):
+def run_daily_sum(ga4, property_id, start, end, dimension_filter=None):
     """
-    Query GA4 with date dimension to get daily active users.
-    Used only for DAU/MAU calculation — sums daily rows intentionally.
+    Query GA4 with date dimension and sum active users across all days.
+    Intentional double-counting — used as DAU numerator for stickiness.
+    DAU/MAU = Sum DAU / MAU × 100 (no division by days needed).
     """
     req = RunReportRequest(
         property=f"properties/{property_id}",
@@ -99,21 +101,17 @@ def run_daily_report(ga4, property_id, start, end, dimension_filter=None):
             end_date=end.strftime("%Y-%m-%d")
         )],
         dimensions=[Dimension(name="date")],
-        metrics=[Metric(name="sessions"), Metric(name="activeUsers")],
+        metrics=[Metric(name="activeUsers")],
         dimension_filter=dimension_filter,
     )
     resp = ga4.run_report(req)
-    sessions, users = 0, 0
-    for row in resp.rows:
-        sessions += int(row.metric_values[0].value)
-        users    += int(row.metric_values[1].value)
-    return sessions, users
+    return sum(int(row.metric_values[0].value) for row in resp.rows)
 
 
 def fetch_month(ga4, prop, start, end):
     pid = prop["ga4"]
 
-    # Deduplicated metrics (correct active users)
+    # Deduplicated MAU metrics
     all_s,  all_u  = run_report(ga4, pid, start, end)
     org_s,  org_u  = run_report(ga4, pid, start, end, channel_filter(CHANNEL_ORGANIC_SEARCH))
     dir_s,  dir_u  = run_report(ga4, pid, start, end, channel_filter(CHANNEL_DIRECT))
@@ -121,20 +119,21 @@ def fetch_month(ga4, prop, start, end):
     soc_s,  soc_u  = run_report(ga4, pid, start, end, channel_filter(CHANNEL_ORGANIC_SOCIAL))
     paid_s, paid_u = run_report(ga4, pid, start, end, channel_filter(CHANNEL_PAID_SEARCH))
 
-    # Sum of daily active users (for DAU/MAU numerator)
-    _, sum_dau = run_daily_report(ga4, pid, start, end)
-    days_in_period = (end - start).days + 1
-    avg_dau = round(sum_dau / days_in_period, 1)
+    # Sum DAU for stickiness
+    sum_dau_all = run_daily_sum(ga4, pid, start, end)
+    sum_dau_org = run_daily_sum(ga4, pid, start, end, channel_filter(CHANNEL_ORGANIC_SEARCH))
 
-    # DAU/MAU % — average daily users as % of monthly unique users
-    dau_mau = round(avg_dau / all_u * 100, 1) if all_u > 0 else 0
+    # DAU/MAU % = Sum DAU / MAU × 100
+    dau_mau_all = round(sum_dau_all / all_u * 100, 1) if all_u > 0 else 0
+    dau_mau_org = round(sum_dau_org / org_u * 100, 1) if org_u > 0 else 0
 
     return {
         "all_sessions": all_s,  "all_users": all_u,
         "org_sessions": org_s,  "org_users": org_u,
         "dir_users":    dir_u,  "ref_users": ref_u,
         "soc_users":    soc_u,  "paid_users": paid_u,
-        "sum_dau":      sum_dau, "avg_dau": avg_dau, "dau_mau": dau_mau,
+        "sum_dau_all":  sum_dau_all, "dau_mau_all": dau_mau_all,
+        "sum_dau_org":  sum_dau_org, "dau_mau_org": dau_mau_org,
     }
 
 
@@ -209,7 +208,8 @@ def main():
             cur["ref_users"],  cur["ref_users"]  - prev["ref_users"],
             cur["soc_users"],  cur["soc_users"]  - prev["soc_users"],
             cur["paid_users"], cur["paid_users"] - prev["paid_users"],
-            cur["sum_dau"], cur["avg_dau"], cur["dau_mau"],
+            cur["sum_dau_all"], cur["dau_mau_all"],
+            cur["sum_dau_org"], cur["dau_mau_org"],
         ]
         rows.append(row)
 
