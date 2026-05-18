@@ -106,7 +106,7 @@ def main():
     ensure_headers(sheets, tab, HEADERS)
 
     page_map = read_page_name_map(sheets)
-    existing_rows = read_all_rows(sheets, tab)
+    existing_row_count = len(read_all_rows(sheets, tab))  # for row_index offset only
     all_new_rows = []
     highlight_ops = []
 
@@ -119,9 +119,8 @@ def main():
 
         for url in all_urls:
             cur = fetch_gsc_page(gsc, prop["gsc"], url, cur_start, cur_end)
-            prev = get_prev_from_sheet(existing_rows, url)
-            if prev is None:
-                prev = fetch_gsc_page(gsc, prop["gsc"], url, prev_start, prev_end)
+            # Always fetch prev from API for accurate comparison
+            prev = fetch_gsc_page(gsc, prop["gsc"], url, prev_start, prev_end)
 
             clicks_change = cur["clicks"] - prev["clicks"]
             imp_change = cur["impressions"] - prev["impressions"]
@@ -148,7 +147,7 @@ def main():
                 cur["position"], pos_change,
                 alert,
             ]
-            row_index = len(existing_rows) + len(all_new_rows) + 1
+            row_index = existing_row_count + len(all_new_rows) + 1
 
             if imp_lvl: highlight_ops.append((row_index, COL_IMP_CHANGE, imp_lvl))
             if pos_lvl: highlight_ops.append((row_index, COL_POS_CHANGE, pos_lvl))
