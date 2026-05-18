@@ -156,7 +156,7 @@ def main():
     ensure_headers(sheets, tab, HEADERS)
 
     page_map = read_page_name_map(sheets)
-    existing_rows = read_all_rows(sheets, tab)
+    existing_row_count = len(read_all_rows(sheets, tab))  # for row_index offset only
     all_new_rows = []
     highlight_ops = []
 
@@ -175,11 +175,15 @@ def main():
         for url in all_urls:
             path = url.replace(base_url, "") or "/"
             metrics = get_page_metrics(ga4, pid, cur_start, cur_end, path, subdomain)
-            prev = get_prev_from_sheet(existing_rows, url)
-            if prev is None:
-                prev_m = get_page_metrics(ga4, pid, prev_start, prev_end, path, subdomain)
-                prev = {"all_users": prev_m["all_users"], "org_users": prev_m["org_users"],
-                        "engagement_rate": prev_m["engagement_rate"], "key_events": prev_m["key_events"]}
+            # Always fetch prev from API for accurate comparison
+            prev_m = get_page_metrics(ga4, pid, prev_start, prev_end, path, subdomain)
+            prev = {
+                "all_users": prev_m["all_users"],
+                "org_users": prev_m["org_users"],
+                "org_sessions": prev_m["org_sessions"],
+                "engagement_rate": prev_m["engagement_rate"],
+                "key_events": prev_m["key_events"],
+            }
 
             all_change = metrics["all_users"] - prev["all_users"]
             org_change = metrics["org_users"] - prev["org_users"]
@@ -193,13 +197,13 @@ def main():
                 metrics["new_users"], metrics["engagement_rate"],
                 metrics["avg_duration"], metrics["key_events"], metrics["ctr"],
             ]
-            row_index = len(existing_rows) + len(all_new_rows) + 1
+            row_index = existing_row_count + len(all_new_rows) + 1
 
             lvl = thresholds.monthly_page_organic_active_users(metrics["org_users"], prev["org_users"])
             if lvl: highlight_ops.append((row_index, COL_ORG_USERS_CHANGE, lvl))
 
             lvl = thresholds.monthly_page_engagement_ratio(
-                metrics["engagement_rate"], prev["engagement_rate"], metrics["org_sessions"])
+                metrics["engagement_rate"], prev["engagement_rate"], prev["org_sessions"])
             if lvl: highlight_ops.append((row_index, COL_ENGAGE, lvl))
 
             lvl = thresholds.monthly_page_key_events(metrics["key_events"], prev["key_events"])
