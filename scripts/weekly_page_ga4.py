@@ -67,7 +67,7 @@ def get_top_pages(ga4, property_id, start, end, limit=TOP_PAGES_COUNT):
             start_date=start.strftime("%Y-%m-%d"),
             end_date=end.strftime("%Y-%m-%d")
         )],
-        dimensions=[Dimension(name="pagePath")],
+        dimensions=[Dimension(name="landingPagePlusQueryString")],
         metrics=[Metric(name="activeUsers")],
         dimension_filter=channel_filter(CHANNEL_ORGANIC_SEARCH),
         order_bys=[OrderBy(metric=OrderBy.MetricOrderBy(metric_name="activeUsers"), desc=True)],
@@ -88,9 +88,9 @@ def get_page_metrics(ga4, property_id, start, end, page_path, subdomain):
     )
     page_filter = FilterExpression(
         filter=Filter(
-            field_name="pagePath",
+            field_name="landingPagePlusQueryString",
             string_filter=Filter.StringFilter(
-                match_type=Filter.StringFilter.MatchType.EXACT,
+                match_type=Filter.StringFilter.MatchType.CONTAINS,
                 value=page_path
             )
         )
@@ -105,7 +105,7 @@ def get_page_metrics(ga4, property_id, start, end, page_path, subdomain):
     req_all = RunReportRequest(
         property=f"properties/{property_id}",
         date_ranges=[date_range],
-        dimensions=[Dimension(name="pagePath")],
+        dimensions=[Dimension(name="landingPagePlusQueryString")],
         metrics=[Metric(name="sessions"), Metric(name="activeUsers")],
         dimension_filter=page_filter,
     )
@@ -119,7 +119,7 @@ def get_page_metrics(ga4, property_id, start, end, page_path, subdomain):
     req_org = RunReportRequest(
         property=f"properties/{property_id}",
         date_ranges=[date_range],
-        dimensions=[Dimension(name="pagePath")],
+        dimensions=[Dimension(name="landingPagePlusQueryString")],
         metrics=[
             Metric(name="sessions"),
             Metric(name="activeUsers"),
@@ -168,6 +168,7 @@ def get_prev_metrics_from_sheet(rows, url):
             return {
                 "all_users": si(7),
                 "org_users": si(10),
+                "org_sessions": si(9),   # col 9 = Organic Channel sessions
                 "engagement_rate": sf(13),
                 "key_events": si(15),
             }
@@ -192,7 +193,7 @@ def main():
     ensure_headers(sheets, tab, HEADERS)
 
     page_map = read_page_name_map(sheets)
-    existing_row_count = len(read_all_rows(sheets, tab))  # needed for row_index offset only
+    existing_rows = read_all_rows(sheets, tab)
 
     all_new_rows = []
     highlight_ops = []
@@ -221,15 +222,18 @@ def main():
             path = url.replace(base_url, "") or "/"
             metrics = get_page_metrics(ga4, pid, cur_start, cur_end, path, subdomain)
 
-            # Always fetch prev from API for accurate comparison
-            prev_m = get_page_metrics(ga4, pid, prev_start, prev_end, path, subdomain)
-            prev = {
-                "all_users": prev_m["all_users"],
-                "org_users": prev_m["org_users"],
-                "org_sessions": prev_m["org_sessions"],
-                "engagement_rate": prev_m["engagement_rate"],
-                "key_events": prev_m["key_events"],
-            }
+            # Get previous values
+            prev = get_prev_metrics_from_sheet(existing_rows, url)
+            if prev is None:
+                # Fetch from API
+                prev_m = get_page_metrics(ga4, pid, prev_start, prev_end, path, subdomain)
+                prev = {
+                    "all_users": prev_m["all_users"],
+                    "org_users": prev_m["org_users"],
+                    "org_sessions": prev_m["org_sessions"],
+                    "engagement_rate": prev_m["engagement_rate"],
+                    "key_events": prev_m["key_events"],
+                }
 
             all_change = metrics["all_users"] - prev["all_users"]
             org_change = metrics["org_users"] - prev["org_users"]
@@ -247,7 +251,7 @@ def main():
                 metrics["new_users"], metrics["engagement_rate"],
                 metrics["avg_duration"], metrics["key_events"], metrics["ctr"],
             ]
-            row_index = existing_row_count + len(all_new_rows) + 1
+            row_index = len(existing_rows) + len(all_new_rows) + 1  # +1 for header
 
             # Threshold checks
             lvl = thresholds.weekly_page_all_channel_active_users(metrics["all_users"], prev["all_users"])
