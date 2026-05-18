@@ -86,11 +86,14 @@ def get_page_metrics(ga4, property_id, start, end, page_path, subdomain):
         start_date=start.strftime("%Y-%m-%d"),
         end_date=end.strftime("%Y-%m-%d")
     )
+    # Home page "/" must use EXACT to avoid matching all URLs; others use CONTAINS
+    match_type = (Filter.StringFilter.MatchType.EXACT if page_path == "/"
+                  else Filter.StringFilter.MatchType.CONTAINS)
     page_filter = FilterExpression(
         filter=Filter(
             field_name="landingPagePlusQueryString",
             string_filter=Filter.StringFilter(
-                match_type=Filter.StringFilter.MatchType.CONTAINS,
+                match_type=match_type,
                 value=page_path
             )
         )
