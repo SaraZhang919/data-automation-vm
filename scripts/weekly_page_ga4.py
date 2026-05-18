@@ -193,7 +193,7 @@ def main():
     ensure_headers(sheets, tab, HEADERS)
 
     page_map = read_page_name_map(sheets)
-    existing_rows = read_all_rows(sheets, tab)
+    existing_row_count = len(read_all_rows(sheets, tab))  # for row_index offset only
 
     all_new_rows = []
     highlight_ops = []
@@ -223,17 +223,15 @@ def main():
             metrics = get_page_metrics(ga4, pid, cur_start, cur_end, path, subdomain)
 
             # Get previous values
-            prev = get_prev_metrics_from_sheet(existing_rows, url)
-            if prev is None:
-                # Fetch from API
-                prev_m = get_page_metrics(ga4, pid, prev_start, prev_end, path, subdomain)
-                prev = {
-                    "all_users": prev_m["all_users"],
-                    "org_users": prev_m["org_users"],
-                    "org_sessions": prev_m["org_sessions"],
-                    "engagement_rate": prev_m["engagement_rate"],
-                    "key_events": prev_m["key_events"],
-                }
+            # Always fetch prev from API for accurate comparison
+            prev_m = get_page_metrics(ga4, pid, prev_start, prev_end, path, subdomain)
+            prev = {
+                "all_users": prev_m["all_users"],
+                "org_users": prev_m["org_users"],
+                "org_sessions": prev_m["org_sessions"],
+                "engagement_rate": prev_m["engagement_rate"],
+                "key_events": prev_m["key_events"],
+            }
 
             all_change = metrics["all_users"] - prev["all_users"]
             org_change = metrics["org_users"] - prev["org_users"]
@@ -251,7 +249,7 @@ def main():
                 metrics["new_users"], metrics["engagement_rate"],
                 metrics["avg_duration"], metrics["key_events"], metrics["ctr"],
             ]
-            row_index = len(existing_rows) + len(all_new_rows) + 1  # +1 for header
+            row_index = existing_row_count + len(all_new_rows) + 1
 
             # Threshold checks
             lvl = thresholds.weekly_page_all_channel_active_users(metrics["all_users"], prev["all_users"])
