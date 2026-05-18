@@ -72,6 +72,9 @@ def weekly_page_engagement_ratio(current_rate, baseline_rate, baseline_sessions)
     if baseline_sessions < 100:
         return None  # ignore
     diff = abs(current_rate - baseline_rate)
+    if baseline_sessions < 500:
+        if diff >= 12: return "yellow"  # 100-499: only yellow, no red
+        return None
     if diff >= 12: return "red"
     if diff >= 8:  return "yellow"
     return None
