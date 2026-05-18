@@ -135,12 +135,16 @@ def main():
         gsc_prop = prop["gsc"]
 
         # Top pages by clicks
-        top_urls = set(get_top_pages_gsc(gsc, gsc_prop, cur_start, cur_end))
+        # Filter to only URLs belonging to this subdomain (sc-domain: returns all subdomains)
+        top_urls = set(
+            url for url in get_top_pages_gsc(gsc, gsc_prop, cur_start, cur_end)
+            if prop["subdomain"] in url
+        )
 
         # Manual page URLs
         manual_urls = set()
         for url, info in page_map.items():
-            if info["lan"] == prop["lan"] or prop["subdomain"] in url:
+            if prop["subdomain"] in url:
                 manual_urls.add(url)
 
         all_urls = list(top_urls | manual_urls)
