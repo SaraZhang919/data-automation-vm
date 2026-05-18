@@ -119,12 +119,13 @@ def batch_highlight(sheets, tab_name, highlights):
             color = COLOR_RED
         else:
             color = COLOR_NONE
+        zero_based = row_index - 1  # scripts pass 1-based; Sheets API needs 0-based
         requests.append({
             "repeatCell": {
                 "range": {
                     "sheetId": tab_id,
-                    "startRowIndex": row_index,
-                    "endRowIndex": row_index + 1,
+                    "startRowIndex": zero_based,
+                    "endRowIndex": zero_based + 1,
                     "startColumnIndex": col_index,
                     "endColumnIndex": col_index + 1,
                 },
