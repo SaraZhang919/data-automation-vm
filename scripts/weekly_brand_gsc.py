@@ -101,7 +101,7 @@ def main():
     tab = SHEET_NAMES["weekly_brand"]
     ensure_headers(sheets, tab, HEADERS)
 
-    existing_rows = read_all_rows(sheets, tab)
+    existing_row_count = len(read_all_rows(sheets, tab))  # for row_index offset only
     all_new_rows = []
     highlight_ops = []
 
@@ -110,13 +110,12 @@ def main():
         cur_queries = fetch_brand_queries(gsc, prop["gsc"], cur_start, cur_end)
 
         for q in cur_queries:
-            prev = get_prev_from_sheet(existing_rows, prop["subdomain"], q["query"])
-            if prev is None:
-                prev_queries = fetch_brand_queries(gsc, prop["gsc"], prev_start, prev_end)
-                prev_match = next((p for p in prev_queries if p["query"] == q["query"]), None)
-                prev = prev_match if prev_match else {
-                    "impressions": 0, "ctr": 0.0, "position": 0.0, "clicks": 0
-                }
+            # Always fetch prev from API for accurate comparison
+            prev_queries = fetch_brand_queries(gsc, prop["gsc"], prev_start, prev_end)
+            prev_match = next((p for p in prev_queries if p["query"] == q["query"]), None)
+            prev = prev_match if prev_match else {
+                "impressions": 0, "ctr": 0.0, "position": 0.0, "clicks": 0
+            }
 
             imp_change = q["impressions"] - prev["impressions"]
             ctr_change = round(q["ctr"] - prev["ctr"], 2)
@@ -128,7 +127,7 @@ def main():
                 q["ctr"], ctr_change,
                 q["position"], pos_change,
             ]
-            row_index = len(existing_rows) + len(all_new_rows) + 1
+            row_index = existing_row_count + len(all_new_rows) + 1
 
             lvl = thresholds.weekly_brand_clicks(q["clicks"], prev["clicks"])
             if lvl:
