@@ -42,6 +42,8 @@ def get_week_range(ref_date):
 
 def fetch_gsc_page(gsc, gsc_property, url, start, end):
     """Fetch GSC metrics for one URL."""
+    # sc-domain: properties require URLs without the https:// scheme
+    filter_url = url.split("://", 1)[1] if gsc_property.startswith("sc-domain:") else url
     body = {
         "startDate": start.strftime("%Y-%m-%d"),
         "endDate": end.strftime("%Y-%m-%d"),
@@ -50,7 +52,7 @@ def fetch_gsc_page(gsc, gsc_property, url, start, end):
             "filters": [{
                 "dimension": "page",
                 "operator": "equals",
-                "expression": url
+                "expression": filter_url
             }]
         }],
         "rowLimit": 1,
@@ -82,7 +84,9 @@ def get_top_pages_gsc(gsc, gsc_property, start, end, limit=TOP_PAGES_COUNT):
     }
     try:
         resp = gsc.searchanalytics().query(siteUrl=gsc_property, body=body).execute()
-        return [r["keys"][0] for r in resp.get("rows", [])]
+        # sc-domain: returns URLs without https:// — normalize to full URL
+        raw = [r["keys"][0] for r in resp.get("rows", [])]
+        return [u if u.startswith("http") else "https://" + u for u in raw]
     except Exception as e:
         print(f"    GSC top pages error: {e}")
         return []
