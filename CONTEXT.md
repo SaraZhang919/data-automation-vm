@@ -20,7 +20,7 @@ Also supports manual ad-hoc checks by date range and by page name with daily bre
 ## Properties (10 Subdomains)
 | Language | Subdomain | GSC Property | GA4 Property ID |
 |---|---|---|---|
-| EN | www.vidmud.com | sc-domain:vidmud.com | 438691348 |
+| EN | www.vidmud.com | https://www.vidmud.com/ | 438691348 |
 | DE | de.vidmud.com | https://de.vidmud.com/ | 459413242 |
 | FR | fr.vidmud.com | https://fr.vidmud.com/ | 459379487 |
 | ES | es.vidmud.com | https://es.vidmud.com/ | 459417270 |
@@ -91,8 +91,8 @@ Also supports manual ad-hoc checks by date range and by page name with daily bre
 ## Key Decisions Made
 1. **Service Account auth** (not OAuth) — no token expiry, no browser flow needed
 2. **Public repo** — credentials are in GitHub Secrets, code has no sensitive data
-3. **Previous week comparison** — first run pulls from API; subsequent runs read from sheet column
-4. **Pages tracked** — top 30 by organic active users per subdomain + all URLs in "Page name" sheet, deduplicated
+3. **Previous period comparison** — always fetched from the API for the prior period; sheet is never used for prev data
+4. **Pages tracked** — top 30 by organic active users per subdomain + all URLs in "Page name" sheet, deduplicated; URL matching uses `url.startswith(base_url)` for strict subdomain isolation
 5. **Brand queries** — filter GSC for exact "Vidmud" + contains "Vidmud"; week-over-week from sheet
 6. **Engagement metrics** (New Users, Engagement Rate, Avg Session Duration, Key Events) — filtered to Organic Search
 7. **Alert levels** — Yellow and Red only, matching Thresholds sheet exactly
@@ -103,6 +103,8 @@ Also supports manual ad-hoc checks by date range and by page name with daily bre
 12. **DAU/WAU and DAU/MAU stickiness** — site-level scripts only; formula is Sum DAU / WAU (or MAU) × 100; tracked for all channels and organic separately
 13. **Manual check comparison** — auto-calculates prior period of same length immediately before chosen range
 14. **Page detail filters** — page name and URL filter both support pipe-separated values (OR logic)
+15. **Page dimension** — GA4 page scripts use `landingPagePlusQueryString` with `CONTAINS` match (home page `/` uses `EXACT`) to count sessions by landing page, not by page visits within a session
+16. **GSC property for www** — uses URL-prefix property `https://www.vidmud.com/` (same format as all other subdomains); `sc-domain:` was incorrect and returned cross-subdomain data
 
 ## Stickiness Metrics Reference
 | Metric | Report | Formula | Meaning |
