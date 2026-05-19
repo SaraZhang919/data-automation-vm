@@ -112,13 +112,14 @@ def main():
 
     for prop in PROPERTIES:
         print(f"  Fetching GSC pages for {prop['subdomain']}...")
-        # Filter to only URLs belonging to this subdomain (sc-domain: returns all subdomains)
+        base_url = f"https://{prop['subdomain']}"
+        # Filter to only URLs belonging to this subdomain
         top_urls = set(
             url for url in get_top_pages_gsc(gsc, prop["gsc"], cur_start, cur_end)
-            if prop["subdomain"] in url
+            if url.startswith(base_url)
         )
         manual_urls = set(url for url, info in page_map.items()
-                         if prop["subdomain"] in url)
+                         if url.startswith(base_url))
         all_urls = list(top_urls | manual_urls)
 
         for url in all_urls:
