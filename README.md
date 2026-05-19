@@ -130,9 +130,9 @@ Every scheduled workflow can be triggered manually with a custom date:
 **Good test dates:**
 | Workflow | Test Date |
 |---|---|
-| Daily | `2026-05-08` |
-| Weekly Sunday | `2026-05-03` |
-| Weekly Tuesday | `2026-05-06` |
+| Daily | `2026-05-18` |
+| Weekly Sunday | `2026-05-11` |
+| Weekly Tuesday | `2026-05-13` |
 | Monthly | `2026-05-04` |
 
 ---
