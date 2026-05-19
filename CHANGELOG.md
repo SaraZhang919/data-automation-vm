@@ -157,3 +157,76 @@ New `run_daily_sum()` function added to both site scripts — intentionally sums
 
 ---
 <!-- Add new sessions below this line -->
+
+## Session 7 — Data Accuracy & Highlighting Bug Fixes
+**Date:** 2026-05-19
+
+### Bug Fixed — Highlight Row Off-by-One (`sheets.py`)
+**Root cause:** `batch_highlight()` passed `row_index` directly to the Google Sheets API, but the API uses 0-based row indexes while scripts calculated 1-based indexes. Every highlight landed one row above the intended cell, coloring the previous week's row instead of the current one.
+
+**Fix:** Added `zero_based = row_index - 1` conversion inside `batch_highlight()` before passing to the API.
+
+**Files changed:** `scripts/sheets.py`
+
+---
+
+### Bug Fixed — Wrong Page Dimension in GA4 Page Scripts
+**Root cause:** `weekly_page_ga4.py` and `monthly_page_ga4.py` used `pagePath` as both the dimension and filter field. `pagePath` counts every page a user visits during a session, inflating metrics. The correct dimension is `landingPagePlusQueryString` which counts only sessions that started on that page.
+
+**Symptom:** Script reported 1,296 all-channel sessions and 412 organic users for `/image-to-video-ai-free.html` vs GA4's correct 388 sessions and 65 organic users.
+
+**Fix:** Replaced `pagePath` with `landingPagePlusQueryString` in all 4 places (top pages query, page filter, all-channel request, organic request). Filter match type changed from `EXACT` to `CONTAINS` to handle query string variants. Home page `/` uses `EXACT` to avoid matching all URLs.
+
+**Files changed:** `scripts/weekly_page_ga4.py`, `scripts/monthly_page_ga4.py`
+
+---
+
+### Bug Fixed — Prev Data Read from Sheet Caused Wrong Change Values
+**Root cause:** All page scripts read `prev` metrics from the sheet on subsequent runs. After fixing the `landingPagePlusQueryString` dimension, the sheet still contained old inflated `pagePath`-based numbers, causing change values like `-160` even though the current week's data was now correct.
+
+**Fix:** All 5 page scripts now always fetch `prev` from the API for the prior period. The sheet is used only for `existing_row_count` to calculate the correct `row_index` for highlighting.
+
+**Files changed:** `scripts/weekly_page_ga4.py`, `scripts/monthly_page_ga4.py`, `scripts/weekly_page_gsc.py`, `scripts/monthly_page_gsc.py`, `scripts/weekly_brand_gsc.py`
+
+---
+
+### Bug Fixed — Engagement Threshold Using Current Sessions Instead of Prev
+**Root cause:** Both GA4 page scripts passed `metrics["org_sessions"]` (current week) as the `baseline_sessions` noise guard to the engagement threshold functions. Should be `prev["org_sessions"]` (prior week).
+
+**Fix:** Added `org_sessions` to the `prev` dict and changed both calls to pass `prev["org_sessions"]`.
+
+**Files changed:** `scripts/weekly_page_ga4.py`, `scripts/monthly_page_ga4.py`
+
+---
+
+### Bug Fixed — Engagement Threshold 100–499 Sessions Gap (`thresholds.py`)
+**Root cause:** `weekly_page_engagement_ratio()` only alerted for `baseline_sessions >= 500`. Sessions 100–499 silently returned `None`.
+
+**Fix:** Sessions 100–499 now alert Yellow only (≥ 12pp change, no Red). Sessions ≥ 500 unchanged (Red ≥ 12pp, Yellow ≥ 8pp).
+
+**Files changed:** `scripts/thresholds.py`
+
+---
+
+### Bug Fixed — Cross-Subdomain URL Contamination in Page Scripts
+**Root cause:** `manual_urls` was filtered with `info["lan"] == prop["lan"] or subdomain in url`, pulling in URLs from other subdomains sharing the same language tag.
+
+**Fix:** All 4 page scripts now use `url.startswith(base_url)` for both `top_urls` and `manual_urls`.
+
+**Files changed:** `scripts/weekly_page_ga4.py`, `scripts/monthly_page_ga4.py`, `scripts/weekly_page_gsc.py`, `scripts/monthly_page_gsc.py`
+
+---
+
+### Bug Fixed — Wrong GSC Property for www.vidmud.com (`config.py`)
+**Root cause:** `config.py` had `"gsc": "sc-domain:vidmud.com"` for the EN/www property. The actual registered GSC property is `https://www.vidmud.com/`. This caused zero data returned for all www GSC queries.
+
+**Fix:** Updated to `"gsc": "https://www.vidmud.com/"`.
+
+**Files changed:** `scripts/config.py`
+
+---
+
+### Key Decisions Updated
+- **Previous period comparison** — always fetched from API, never from sheet
+- **Page dimension** — `landingPagePlusQueryString` with `CONTAINS` (except `/` uses `EXACT`)
+- **URL filtering** — `url.startswith(base_url)` for strict subdomain isolation across all page scripts
