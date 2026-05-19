@@ -4,7 +4,7 @@ To add/remove subdomains, edit PROPERTIES only. Everything else reads from here.
 """
 
 PROPERTIES = [
-    {"lan": "EN", "subdomain": "www.vidmud.com",  "gsc": "sc-domain:vidmud.com",         "ga4": "438691348"},
+    {"lan": "EN", "subdomain": "www.vidmud.com",  "gsc": "https://www.vidmud.com/",       "ga4": "438691348"},
     {"lan": "DE", "subdomain": "de.vidmud.com",   "gsc": "https://de.vidmud.com/",        "ga4": "459413242"},
     {"lan": "FR", "subdomain": "fr.vidmud.com",   "gsc": "https://fr.vidmud.com/",        "ga4": "459379487"},
     {"lan": "ES", "subdomain": "es.vidmud.com",   "gsc": "https://es.vidmud.com/",        "ga4": "459417270"},
