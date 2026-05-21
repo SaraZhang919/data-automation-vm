@@ -71,12 +71,10 @@ def weekly_page_engagement_ratio(current_rate, baseline_rate, baseline_sessions)
     """Orange(yellow)/Red for Engagement Rate — Weekly by page. Rates in 0-100 scale (pp)."""
     if baseline_sessions < 100:
         return None  # ignore
-    diff = abs(current_rate - baseline_rate)
-    if baseline_sessions < 500:
-        if diff >= 12: return "yellow"  # 100-499: only yellow, no red
-        return None
-    if diff >= 12: return "red"
-    if diff >= 8:  return "yellow"
+    if baseline_sessions >= 500:
+        diff = abs(current_rate - baseline_rate)
+        if diff >= 12: return "red"
+        if diff >= 8:  return "yellow"
     return None
 
 
@@ -291,4 +289,112 @@ def monthly_brand_clicks(current, baseline):
     else:
         if _check(current, baseline, 0.22, 15000): return "red"
         if _check(current, baseline, 0.15, 8000):  return "yellow"
+    return None
+
+
+# ── Weekly Site - GA4 ─────────────────────────────────────────────────────────
+
+def weekly_site_all_channel_active_users(current, baseline):
+    """Yellow/Red for All Channel Active Users — Weekly Site GA4."""
+    if baseline < 1000:
+        if _check(current, baseline, 0.40, 400): return "red"
+        if _check(current, baseline, 0.25, 150): return "yellow"
+    elif baseline < 5000:
+        if _check(current, baseline, 0.30, 1200): return "red"
+        if _check(current, baseline, 0.18, 700):  return "yellow"
+    elif baseline < 20000:
+        if _check(current, baseline, 0.25, 3500): return "red"
+        if _check(current, baseline, 0.12, 1800): return "yellow"
+    else:
+        if _check(current, baseline, 0.18, 10000): return "red"
+        if _check(current, baseline, 0.10, 5000):  return "yellow"
+    return None
+
+
+def weekly_site_organic_active_users(current, baseline):
+    """Yellow/Red for Organic Search Active Users — Weekly Site GA4."""
+    if baseline < 500:
+        if _check(current, baseline, 0.50, 200): return "red"
+        if _check(current, baseline, 0.35, 120): return "yellow"
+    elif baseline < 2000:
+        if _check(current, baseline, 0.30, 400): return "red"
+        if _check(current, baseline, 0.20, 250): return "yellow"
+    elif baseline < 10000:
+        if _check(current, baseline, 0.25, 1000): return "red"
+        if _check(current, baseline, 0.15, 700):  return "yellow"
+    else:
+        if _check(current, baseline, 0.18, 2200): return "red"
+        if _check(current, baseline, 0.10, 1500): return "yellow"
+    return None
+
+
+# ── Weekly Site - GSC ─────────────────────────────────────────────────────────
+
+def weekly_site_gsc_clicks(current, baseline):
+    """Yellow/Red for Clicks — Weekly Site GSC."""
+    if baseline < 500:
+        if _check(current, baseline, 0.50, 200): return "red"
+        if _check(current, baseline, 0.35, 120): return "yellow"
+    elif baseline < 2000:
+        if _check(current, baseline, 0.30, 400): return "red"
+        if _check(current, baseline, 0.20, 250): return "yellow"
+    elif baseline < 10000:
+        if _check(current, baseline, 0.25, 1000): return "red"
+        if _check(current, baseline, 0.15, 700):  return "yellow"
+    else:
+        if _check(current, baseline, 0.18, 2200): return "red"
+        if _check(current, baseline, 0.10, 1500): return "yellow"
+    return None
+
+
+def weekly_site_gsc_impressions(current, baseline):
+    """Yellow/Red for Impressions — Weekly Site GSC."""
+    if baseline < 6000:
+        if _check(current, baseline, 0.50, 1500): return "red"
+        if _check(current, baseline, 0.25, 1000): return "yellow"
+    elif baseline < 30000:
+        if _check(current, baseline, 0.30, 4500): return "red"
+        if _check(current, baseline, 0.20, 2500): return "yellow"
+    elif baseline < 100000:
+        if _check(current, baseline, 0.25, 12000): return "red"
+        if _check(current, baseline, 0.15, 6000):  return "yellow"
+    else:
+        if _check(current, baseline, 0.18, 25000): return "red"
+        if _check(current, baseline, 0.10, 12000): return "yellow"
+    return None
+
+
+# ── 4-week Site - GSC ─────────────────────────────────────────────────────────
+
+def monthly_site_gsc_clicks(current, baseline):
+    """Yellow/Red for Clicks — 4-week Site GSC."""
+    if baseline < 2000:
+        if _check(current, baseline, 0.40, 800):  return "red"
+        if _check(current, baseline, 0.25, 400):  return "yellow"
+    elif baseline < 8000:
+        if _check(current, baseline, 0.30, 2000): return "red"
+        if _check(current, baseline, 0.18, 1000): return "yellow"
+    elif baseline < 40000:
+        if _check(current, baseline, 0.22, 5000): return "red"
+        if _check(current, baseline, 0.12, 2500): return "yellow"
+    else:
+        if _check(current, baseline, 0.18, 10000): return "red"
+        if _check(current, baseline, 0.10, 6000):  return "yellow"
+    return None
+
+
+def monthly_site_gsc_impressions(current, baseline):
+    """Yellow/Red for Impressions — 4-week Site GSC."""
+    if baseline < 20000:
+        if _check(current, baseline, 0.40, 8000):  return "red"
+        if _check(current, baseline, 0.25, 4000):  return "yellow"
+    elif baseline < 80000:
+        if _check(current, baseline, 0.30, 20000): return "red"
+        if _check(current, baseline, 0.18, 10000): return "yellow"
+    elif baseline < 400000:
+        if _check(current, baseline, 0.22, 50000): return "red"
+        if _check(current, baseline, 0.12, 25000): return "yellow"
+    else:
+        if _check(current, baseline, 0.18, 100000): return "red"
+        if _check(current, baseline, 0.10, 60000):  return "yellow"
     return None
