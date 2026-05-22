@@ -45,7 +45,7 @@ def main():
     parser.add_argument("--date", help="Reference date YYYY-MM-DD (default: today)")
     args = parser.parse_args()
 
-    ref = date.fromisoformat(args.date) if args.date else date.today()
+    ref = date.fromisoformat(args.date.replace("/", "-")) if args.date else date.today()
     target_date = ref - timedelta(days=3)  # GSC delay: fetch 3 days ago
     print(f"Running Daily Site GSC for {target_date}")
 
