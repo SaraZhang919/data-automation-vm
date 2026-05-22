@@ -121,7 +121,7 @@ def main():
     parser.add_argument("--date", help="Target date YYYY-MM-DD (default: yesterday)")
     args = parser.parse_args()
 
-    target_date = date.fromisoformat(args.date) if args.date else date.today() - timedelta(days=1)
+    target_date = (date.fromisoformat(args.date) if args.date else date.today()) - timedelta(days=1)
     print(f"Running Daily GA4 for {target_date}")
 
     ga4 = get_ga4_client()
