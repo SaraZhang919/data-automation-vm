@@ -9,11 +9,24 @@ on:
         description: "Reference date (YYYY-MM-DD). Use the 4th of a past month to test."
         required: false
         default: ""
+      script:
+        description: "Which script to run"
+        required: false
+        default: "All"
+        type: choice
+        options:
+          - All
+          - 4-week Site GA4
+          - 4-week Page GA4
+          - 4-week Page GSC
+          - 4-week Site GSC
 
 jobs:
   monthly:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repo
@@ -28,6 +41,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run 4-week site GA4
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == '4-week Site GA4'
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
@@ -40,6 +54,7 @@ jobs:
           fi
 
       - name: Run 4-week page GA4
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == '4-week Page GA4'
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
@@ -52,6 +67,7 @@ jobs:
           fi
 
       - name: Run 4-week page GSC
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == '4-week Page GSC'
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
@@ -61,4 +77,17 @@ jobs:
             python scripts/monthly_page_gsc.py --date "$RUN_DATE"
           else
             python scripts/monthly_page_gsc.py
+          fi
+
+      - name: Run 4-week Site GSC
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == '4-week Site GSC'
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          RUN_DATE: ${{ github.event.inputs.run_date }}
+        run: |
+          if [ -n "$RUN_DATE" ]; then
+            python scripts/monthly_site_gsc.py --date "$RUN_DATE"
+          else
+            python scripts/monthly_site_gsc.py
           fi
