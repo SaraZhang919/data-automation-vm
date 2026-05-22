@@ -26,13 +26,14 @@ HEADERS = [
     "Lan", "Subdomain", "Page Type", "Page Name", "Page Url",
     "All channel Sessions", "All channel Active Users",
     "Organic Sessions", "Organic Active Users",
+    "Organic channel new users",   # NEW
     "New Users", "Engagement Rate %",
     "Avg Session Duration", "Key Events", "CTR"
 ]
 
 COL_ORG_USERS   = 10   # 0-based for highlight
-COL_KEY_EVENTS  = 14
-COL_ENGAGE      = 12
+COL_KEY_EVENTS  = 15   # was 14, shifted +1
+COL_ENGAGE      = 13   # was 12, shifted +1
 
 
 # ---------------------------------------------------------------------------
@@ -59,11 +60,13 @@ def get_daily_metrics(ga4, property_id, start: date, end: date, page_path: str, 
         start_date=start.strftime("%Y-%m-%d"),
         end_date=end.strftime("%Y-%m-%d")
     )
+    match_type = (Filter.StringFilter.MatchType.EXACT if page_path == "/"
+                  else Filter.StringFilter.MatchType.CONTAINS)
     page_filter = FilterExpression(
         filter=Filter(
-            field_name="pagePath",
+            field_name="landingPagePlusQueryString",
             string_filter=Filter.StringFilter(
-                match_type=Filter.StringFilter.MatchType.EXACT,
+                match_type=match_type,
                 value=page_path
             )
         )
@@ -78,7 +81,7 @@ def get_daily_metrics(ga4, property_id, start: date, end: date, page_path: str, 
     req_all = RunReportRequest(
         property=f"properties/{property_id}",
         date_ranges=[date_range],
-        dimensions=[Dimension(name="date"), Dimension(name="pagePath")],
+        dimensions=[Dimension(name="date"), Dimension(name="landingPagePlusQueryString")],
         metrics=[Metric(name="sessions"), Metric(name="activeUsers")],
         dimension_filter=page_filter,
         order_bys=[OrderBy(dimension=OrderBy.DimensionOrderBy(dimension_name="date"))],
@@ -96,7 +99,7 @@ def get_daily_metrics(ga4, property_id, start: date, end: date, page_path: str, 
     req_org = RunReportRequest(
         property=f"properties/{property_id}",
         date_ranges=[date_range],
-        dimensions=[Dimension(name="date"), Dimension(name="pagePath")],
+        dimensions=[Dimension(name="date"), Dimension(name="landingPagePlusQueryString")],
         metrics=[
             Metric(name="sessions"),
             Metric(name="activeUsers"),
@@ -116,6 +119,7 @@ def get_daily_metrics(ga4, property_id, start: date, end: date, page_path: str, 
         org_by_date[d] = {
             "org_sessions":    int(v[0].value),
             "org_users":       int(v[1].value),
+            "org_new_users":   int(v[2].value),   # NEW
             "new_users":       int(v[2].value),
             "engagement_rate": round(float(v[3].value) * 100, 2),
             "avg_duration":    round(float(v[4].value), 1),
@@ -129,7 +133,7 @@ def get_daily_metrics(ga4, property_id, start: date, end: date, page_path: str, 
         d_key = current.strftime("%Y%m%d")
         a = all_by_date.get(d_key, {"all_sessions": 0, "all_users": 0})
         o = org_by_date.get(d_key, {
-            "org_sessions": 0, "org_users": 0, "new_users": 0,
+            "org_sessions": 0, "org_users": 0, "org_new_users": 0, "new_users": 0,
             "engagement_rate": 0.0, "avg_duration": 0.0, "key_events": 0
         })
         ctr = round(o["key_events"] / o["org_users"], 4) if o["org_users"] > 0 else 0
@@ -216,6 +220,7 @@ def main():
                 info["lan"], subdomain, info["page_type"], info["page_name"], url,
                 day["all_sessions"], day["all_users"],
                 day["org_sessions"], day["org_users"],
+                day["org_new_users"],   # NEW
                 day["new_users"], day["engagement_rate"],
                 day["avg_duration"], day["key_events"], day["ctr"],
             ]
