@@ -9,11 +9,23 @@ on:
         description: "Reference date (YYYY-MM-DD). Use a past Tuesday to test."
         required: false
         default: ""
+      script:
+        description: "Which script to run"
+        required: false
+        default: "All"
+        type: choice
+        options:
+          - All
+          - Weekly Page GSC
+          - Weekly Brand GSC
+          - Weekly Site GSC
 
 jobs:
   weekly-tuesday:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repo
@@ -28,6 +40,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run weekly page GSC
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == 'Weekly Page GSC'
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
@@ -40,6 +53,7 @@ jobs:
           fi
 
       - name: Run weekly brand GSC
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == 'Weekly Brand GSC'
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
@@ -49,4 +63,17 @@ jobs:
             python scripts/weekly_brand_gsc.py --date "$RUN_DATE"
           else
             python scripts/weekly_brand_gsc.py
+          fi
+
+      - name: Run Weekly Site GSC
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == 'Weekly Site GSC'
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          RUN_DATE: ${{ github.event.inputs.run_date }}
+        run: |
+          if [ -n "$RUN_DATE" ]; then
+            python scripts/weekly_site_gsc.py --date "$RUN_DATE"
+          else
+            python scripts/weekly_site_gsc.py
           fi
