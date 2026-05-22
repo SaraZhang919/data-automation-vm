@@ -49,6 +49,9 @@ Also supports manual ad-hoc checks by date range and by page name with daily bre
 | Manual check - GSC | GSC | Manual trigger only |
 | Manual page detail - GA4 | GA4 | Manual trigger only |
 | Manual page detail - GSC | GSC | Manual trigger only |
+| Weekly Site - GSC | GSC | Every Tuesday 4PM JST |
+| Daily Site - GSC | GSC | Every day 4PM JST |
+| 4-week Site - GSC | GSC | 4th of month 4PM JST |
 
 ## Schedules (all times JST = UTC+9, so 4PM JST = 07:00 UTC)
 - Daily: `0 7 * * *`
@@ -77,14 +80,17 @@ Also supports manual ad-hoc checks by date range and by page name with daily bre
 | `scripts/manual_check_gsc.py` | Manual GSC by page for any custom date range |
 | `scripts/manual_page_detail_ga4.py` | GA4 daily breakdown filtered by page name |
 | `scripts/manual_page_detail_gsc.py` | GSC daily breakdown filtered by page name |
+| `scripts/weekly_site_gsc.py` | Weekly GSC site-level clicks/impressions/CTR/position per subdomain |
+| `scripts/daily_site_gsc.py` | Daily GSC site-level data per subdomain (3-day delay) |
+| `scripts/monthly_site_gsc.py` | Monthly GSC site-level clicks/impressions/CTR/position per subdomain |
 
 ## Workflows
 | File | Trigger | Inputs |
 |---|---|---|
-| `daily.yml` | Cron + manual | `run_date` (optional) |
-| `weekly_sunday.yml` | Cron + manual | `run_date` (optional) |
-| `weekly_tuesday.yml` | Cron + manual | `run_date` (optional) |
-| `monthly.yml` | Cron + manual | `run_date` (optional) |
+| `daily.yml` | Cron + manual | `run_date` (optional), `script` choice (optional) |
+| `weekly_sunday.yml` | Cron + manual | `run_date` (optional), `script` choice (optional) |
+| `weekly_tuesday.yml` | Cron + manual | `run_date` (optional), `script` choice (optional) |
+| `monthly.yml` | Cron + manual | `run_date` (optional), `script` choice (optional) |
 | `manual_check.yml` | Manual only | `start_date`, `end_date`, `data_source` |
 | `manual_page_detail.yml` | Manual only | `start_date`, `end_date`, `page_name`, `url_filter`, `data_source` |
 
@@ -105,6 +111,9 @@ Also supports manual ad-hoc checks by date range and by page name with daily bre
 14. **Page detail filters** — page name and URL filter both support pipe-separated values (OR logic)
 15. **Page dimension** — GA4 page scripts use `landingPagePlusQueryString` with `CONTAINS` match (home page `/` uses `EXACT`) to count sessions by landing page, not by page visits within a session
 16. **GSC property for www** — uses URL-prefix property `https://www.vidmud.com/` (same format as all other subdomains); `sc-domain:` was incorrect and returned cross-subdomain data
+17. **GSC site-level queries** — use `dimensions: []` (empty list); this returns true site-level aggregates, not the sum of individual pages
+18. **Date input normalization** — new scripts accept both `YYYY-MM-DD` and `YYYY/MM/DD` via `.replace("/", "-")` before parsing
+19. **Workflow script selection** — all scheduled workflows support a `script` choice input for manual runs; scheduled runs always execute all steps
 
 ## Stickiness Metrics Reference
 | Metric | Report | Formula | Meaning |
