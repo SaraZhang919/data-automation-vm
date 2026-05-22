@@ -119,6 +119,26 @@ def run_report_with_new_users(ga4, property_id, start_date, end_date, dimension_
     return 0, 0, 0
 
 
+def run_daily_sum(ga4, property_id, start_date, end_date, dimension_filter=None):
+    """
+    Query GA4 with date dimension and sum active users across all days.
+    Intentional double-counting — used as DAU numerator for stickiness.
+    DAU/WAU = Sum DAU / WAU (no division by 7 needed).
+    """
+    req = RunReportRequest(
+        property=f"properties/{property_id}",
+        date_ranges=[DateRange(
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d")
+        )],
+        dimensions=[Dimension(name="date")],
+        metrics=[Metric(name="activeUsers")],
+        dimension_filter=dimension_filter,
+    )
+    resp = ga4.run_report(req)
+    return sum(int(row.metric_values[0].value) for row in resp.rows)
+
+
 
     """
     Query GA4 with date dimension and sum active users across all days.
