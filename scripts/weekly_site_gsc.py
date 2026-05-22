@@ -61,7 +61,7 @@ def main():
     parser.add_argument("--date", help="Reference Tuesday YYYY-MM-DD")
     args = parser.parse_args()
 
-    ref = date.fromisoformat(args.date) if args.date else date.today()
+    ref = date.fromisoformat(args.date.replace("/", "-")) if args.date else date.today()
     cur_start, cur_end = get_week_range(ref)
     prev_start = cur_start - timedelta(days=7)
     prev_end   = cur_end   - timedelta(days=7)
