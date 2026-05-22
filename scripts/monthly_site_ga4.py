@@ -15,13 +15,15 @@ from auth import get_ga4_client, get_sheets_client
 from config import PROPERTIES, SHEET_NAMES, GA4_CHANNEL_DIM
 from config import CHANNEL_ORGANIC_SEARCH, CHANNEL_DIRECT, CHANNEL_REFERRAL
 from config import CHANNEL_ORGANIC_SOCIAL, CHANNEL_PAID_SEARCH
-from sheets import ensure_headers, append_rows, read_all_rows
+from sheets import ensure_headers, append_rows, read_all_rows, batch_highlight
+import thresholds
 
 HEADERS = [
     "Date", "Lan", "Subdomain",
     "All channel Sessions", "All channel Active Users (MAU)",
     "All channel Active Users Change Value", "Major Change Contribution channel",
     "Organic Channel sessions", "Organic channel active users (MAU)",
+    "Organic channel new users",
     "Organic channel active users Change Value",
     "Direct Channel Active User", "Direct Change Value",
     "Referral Channel Active User", "Referral Change",
@@ -33,11 +35,13 @@ HEADERS = [
 
 COL_SUBDOMAIN  = 2
 COL_ALL_USERS  = 4
+COL_ALL_CHANGE = 5
 COL_ORG_USERS  = 8
-COL_DIR_USERS  = 10
-COL_REF_USERS  = 12
-COL_SOC_USERS  = 14
-COL_PAID_USERS = 16
+COL_ORG_CHANGE = 10  # shifted +1 due to new column
+COL_DIR_USERS  = 11
+COL_REF_USERS  = 13
+COL_SOC_USERS  = 15
+COL_PAID_USERS = 17
 
 
 def get_month_range(ref_date):
@@ -88,6 +92,28 @@ def run_report(ga4, property_id, start, end, dimension_filter=None):
     return 0, 0
 
 
+def run_report_with_new_users(ga4, property_id, start, end, dimension_filter=None):
+    """Same as run_report but also returns newUsers. Used for organic channel."""
+    req = RunReportRequest(
+        property=f"properties/{property_id}",
+        date_ranges=[DateRange(
+            start_date=start.strftime("%Y-%m-%d"),
+            end_date=end.strftime("%Y-%m-%d")
+        )],
+        dimensions=[],
+        metrics=[Metric(name="sessions"), Metric(name="activeUsers"), Metric(name="newUsers")],
+        dimension_filter=dimension_filter,
+    )
+    resp = ga4.run_report(req)
+    if resp.rows:
+        return (
+            int(resp.rows[0].metric_values[0].value),
+            int(resp.rows[0].metric_values[1].value),
+            int(resp.rows[0].metric_values[2].value),
+        )
+    return 0, 0, 0
+
+
 def run_daily_sum(ga4, property_id, start, end, dimension_filter=None):
     """
     Query GA4 with date dimension and sum active users across all days.
@@ -112,12 +138,12 @@ def fetch_month(ga4, prop, start, end):
     pid = prop["ga4"]
 
     # Deduplicated MAU metrics
-    all_s,  all_u  = run_report(ga4, pid, start, end)
-    org_s,  org_u  = run_report(ga4, pid, start, end, channel_filter(CHANNEL_ORGANIC_SEARCH))
-    dir_s,  dir_u  = run_report(ga4, pid, start, end, channel_filter(CHANNEL_DIRECT))
-    ref_s,  ref_u  = run_report(ga4, pid, start, end, channel_filter(CHANNEL_REFERRAL))
-    soc_s,  soc_u  = run_report(ga4, pid, start, end, channel_filter(CHANNEL_ORGANIC_SOCIAL))
-    paid_s, paid_u = run_report(ga4, pid, start, end, channel_filter(CHANNEL_PAID_SEARCH))
+    all_s,  all_u            = run_report(ga4, pid, start, end)
+    org_s,  org_u, org_new_u = run_report_with_new_users(ga4, pid, start, end, channel_filter(CHANNEL_ORGANIC_SEARCH))
+    dir_s,  dir_u            = run_report(ga4, pid, start, end, channel_filter(CHANNEL_DIRECT))
+    ref_s,  ref_u            = run_report(ga4, pid, start, end, channel_filter(CHANNEL_REFERRAL))
+    soc_s,  soc_u            = run_report(ga4, pid, start, end, channel_filter(CHANNEL_ORGANIC_SOCIAL))
+    paid_s, paid_u           = run_report(ga4, pid, start, end, channel_filter(CHANNEL_PAID_SEARCH))
 
     # Sum DAU for stickiness
     sum_dau_all = run_daily_sum(ga4, pid, start, end)
@@ -129,7 +155,7 @@ def fetch_month(ga4, prop, start, end):
 
     return {
         "all_sessions": all_s,  "all_users": all_u,
-        "org_sessions": org_s,  "org_users": org_u,
+        "org_sessions": org_s,  "org_users": org_u, "org_new_users": org_new_u,
         "dir_users":    dir_u,  "ref_users": ref_u,
         "soc_users":    soc_u,  "paid_users": paid_u,
         "sum_dau_all":  sum_dau_all, "dau_mau_all": dau_mau_all,
@@ -188,14 +214,14 @@ def main():
     tab    = SHEET_NAMES["monthly_site_ga4"]
     ensure_headers(sheets, tab, HEADERS)
 
-    rows = []
+    existing_row_count = len(read_all_rows(sheets, tab))  # for row_index offset only
+    all_new_rows  = []
+    highlight_ops = []
+
     for prop in PROPERTIES:
         print(f"  Fetching {prop['subdomain']}...")
         cur  = fetch_month(ga4, prop, cur_start, cur_end)
-        prev = get_prev_from_sheet(sheets, tab, prop["subdomain"])
-        if prev is None:
-            print(f"    No prev data in sheet — fetching from API...")
-            prev = fetch_month(ga4, prop, prev_start, prev_end)
+        prev = fetch_month(ga4, prop, prev_start, prev_end)
 
         contrib = major_contributor(cur, prev)
         row = [
@@ -203,6 +229,7 @@ def main():
             cur["all_sessions"], cur["all_users"],
             cur["all_users"]  - prev["all_users"],  contrib,
             cur["org_sessions"], cur["org_users"],
+            cur["org_new_users"],
             cur["org_users"]  - prev["org_users"],
             cur["dir_users"],  cur["dir_users"]  - prev["dir_users"],
             cur["ref_users"],  cur["ref_users"]  - prev["ref_users"],
@@ -211,10 +238,21 @@ def main():
             cur["sum_dau_all"], cur["dau_mau_all"],
             cur["sum_dau_org"], cur["dau_mau_org"],
         ]
-        rows.append(row)
 
-    append_rows(sheets, tab, rows)
-    print(f"Monthly Site GA4 complete. {len(rows)} rows written.")
+        row_index = existing_row_count + len(all_new_rows) + 1
+
+        lvl = thresholds.monthly_site_all_channel_active_users(cur["all_users"], prev["all_users"])
+        if lvl: highlight_ops.append((row_index, COL_ALL_CHANGE, lvl))
+
+        lvl = thresholds.monthly_site_organic_active_users(cur["org_users"], prev["org_users"])
+        if lvl: highlight_ops.append((row_index, COL_ORG_CHANGE, lvl))
+
+        all_new_rows.append(row)
+
+    append_rows(sheets, tab, all_new_rows)
+    if highlight_ops:
+        batch_highlight(sheets, tab, highlight_ops)
+    print(f"Monthly Site GA4 complete. {len(all_new_rows)} rows written, {len(highlight_ops)} highlights applied.")
 
 
 if __name__ == "__main__":
