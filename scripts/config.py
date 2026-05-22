@@ -28,6 +28,9 @@ SHEET_NAMES = {
     "monthly_page_ga4":  "4-week page - GA4",
     "monthly_page_gsc":  "4-week by page - GSC",
     "thresholds":        "Thresholds",
+    "weekly_site_gsc":   "Weekly Site - GSC",
+    "daily_site_gsc":    "Daily Site - GSC",
+    "monthly_site_gsc":  "4-week Site - GSC",
 }
 
 # GA4 channel group dimension name
