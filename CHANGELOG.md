@@ -230,3 +230,94 @@ New `run_daily_sum()` function added to both site scripts — intentionally sums
 - **Previous period comparison** — always fetched from API, never from sheet
 - **Page dimension** — `landingPagePlusQueryString` with `CONTAINS` (except `/` uses `EXACT`)
 - **URL filtering** — `url.startswith(base_url)` for strict subdomain isolation across all page scripts
+
+## Session 8 — New Site-Level GSC Scripts + Manual Page Detail Fix + Workflow Improvements
+**Date:** 2026-05-22
+
+### Fixed — Wrong Page Dimension in `manual_page_detail_ga4.py`
+**Root cause:** Script used `pagePath` with `EXACT` match for all pages, same error as the page scripts fixed in Session 7.
+
+**Fix:** Replaced `pagePath` with `landingPagePlusQueryString`. Match type is now `EXACT` for `/` and `CONTAINS` for all other paths.
+
+**Files changed:** `scripts/manual_page_detail_ga4.py`
+
+---
+
+### Added — `"Organic channel new users"` Column to `manual_page_detail_ga4.py`
+New column inserted after `"Organic Active Users"` in HEADERS (position 11, 0-based).
+
+- `COL_KEY_EVENTS` shifted from 14 → 15
+- `COL_ENGAGE` shifted from 12 → 13
+- `org_new_users` added to `org_by_date` dict and fallback dict
+- Row construction updated to 17 items (matches 17 headers)
+
+**Files changed:** `scripts/manual_page_detail_ga4.py`
+
+---
+
+### Added — `scripts/weekly_site_gsc.py` (new file)
+Pulls GSC site-level totals (no page dimension) per subdomain for the completed Sun–Sat week before the reference date. Compares to the prior week fetched from the API. Highlights Clicks Change and Impressions Change columns.
+
+- Writes to `Weekly Site - GSC` tab
+- Schedule: every Tuesday 4PM JST (added to `weekly_tuesday.yml`)
+- Uses `dimensions: []` for true site-level aggregate (not sum of pages)
+
+---
+
+### Added — `scripts/daily_site_gsc.py` (new file)
+Pulls GSC site-level totals for a single day (reference date minus 3 days to account for GSC data delay). No comparison or highlighting.
+
+- Writes to `Daily Site - GSC` tab
+- Schedule: every day 4PM JST (added to `daily.yml`)
+
+---
+
+### Added — `scripts/monthly_site_gsc.py` (new file)
+Pulls GSC site-level totals for the previous full calendar month. Compares to the month before that, fetched from the API. Highlights Clicks Change and Impressions Change columns.
+
+- Writes to `4-week Site - GSC` tab
+- Schedule: 4th of month 4PM JST (added to `monthly.yml`)
+
+---
+
+### Added — 3 New Sheet Tab Names to `config.py`
+```python
+"weekly_site_gsc":   "Weekly Site - GSC"
+"daily_site_gsc":    "Daily Site - GSC"
+"monthly_site_gsc":  "4-week Site - GSC"
+```
+
+**Files changed:** `scripts/config.py`
+
+---
+
+### Improved — Workflow Script Selection for Manual Testing
+All 4 scheduled workflows now have a `script` choice input in `workflow_dispatch`. When triggered manually, a dropdown lets you run one script instead of all. On scheduled runs, all scripts run as before.
+
+| Workflow | Options |
+|---|---|
+| `daily.yml` | All, Daily GA4, Daily Site GSC |
+| `weekly_sunday.yml` | All, Weekly Site GA4, Weekly Page GA4 |
+| `weekly_tuesday.yml` | All, Weekly Page GSC, Weekly Brand GSC, Weekly Site GSC |
+| `monthly.yml` | All, 4-week Site GA4, 4-week Page GA4, 4-week Page GSC, 4-week Site GSC |
+
+---
+
+### Fixed — Node.js Deprecation Warning in All Workflows
+Added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` at the job `env:` level in all 4 workflow files.
+
+**Files changed:** `daily.yml`, `weekly_sunday.yml`, `weekly_tuesday.yml`, `monthly.yml`
+
+---
+
+### Fixed — Date Input Accepts Slashes in All New Scripts
+All 3 new GSC site scripts normalize the `--date` argument with `.replace("/", "-")` before parsing, so both `2026-05-22` and `2026/05/22` are accepted.
+
+**Files changed:** `scripts/daily_site_gsc.py`, `scripts/weekly_site_gsc.py`, `scripts/monthly_site_gsc.py`
+
+---
+
+### New Sheet Tabs Required (create manually)
+- `Weekly Site - GSC`
+- `Daily Site - GSC`
+- `4-week Site - GSC`
