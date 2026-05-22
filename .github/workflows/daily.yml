@@ -9,11 +9,22 @@ on:
         description: "Reference date (YYYY-MM-DD). Defaults to today."
         required: false
         default: ""
+      script:
+        description: "Which script to run"
+        required: false
+        default: "All"
+        type: choice
+        options:
+          - All
+          - Daily GA4
+          - Daily Site GSC
 
 jobs:
   daily-ga4:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repo
@@ -28,6 +39,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run daily GA4 script
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == 'Daily GA4'
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
@@ -37,4 +49,17 @@ jobs:
             python scripts/daily_ga4.py --date "$RUN_DATE"
           else
             python scripts/daily_ga4.py
+          fi
+
+      - name: Run Daily Site GSC
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == 'Daily Site GSC'
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          RUN_DATE: ${{ github.event.inputs.run_date }}
+        run: |
+          if [ -n "$RUN_DATE" ]; then
+            python scripts/daily_site_gsc.py --date "$RUN_DATE"
+          else
+            python scripts/daily_site_gsc.py
           fi
