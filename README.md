@@ -69,6 +69,9 @@ In your Google Sheet, create these tabs with these **exact names**:
 - `Manual check - GSC`
 - `Manual page detail - GA4`
 - `Manual page detail - GSC`
+- `Weekly Site - GSC`
+- `Daily Site - GSC`
+- `4-week Site - GSC`
 
 > The first run will write headers automatically. Manual tabs stay untouched.
 
@@ -127,6 +130,8 @@ Every scheduled workflow can be triggered manually with a custom date:
 3. Click **Run workflow**
 4. Enter a past date and click **Run workflow**
 
+When testing a single script, use the **Script** dropdown to select only what you need — other steps will be skipped.
+
 **Good test dates:**
 | Workflow | Test Date |
 |---|---|
@@ -175,7 +180,10 @@ Thresholds are defined in the `Thresholds` sheet tab and coded in `scripts/thres
 │   ├── manual_check_ga4.py        ← Manual check by date range
 │   ├── manual_check_gsc.py        ← Manual check by date range
 │   ├── manual_page_detail_ga4.py  ← Daily breakdown by page name
-│   └── manual_page_detail_gsc.py  ← Daily breakdown by page name
+│   ├── manual_page_detail_gsc.py  ← Daily breakdown by page name
+│   ├── weekly_site_gsc.py          ← Weekly GSC site-level per subdomain
+│   ├── daily_site_gsc.py           ← Daily GSC site-level per subdomain
+│   └── monthly_site_gsc.py         ← Monthly GSC site-level per subdomain
 ├── requirements.txt
 ├── .gitignore
 ├── CONTEXT.md
