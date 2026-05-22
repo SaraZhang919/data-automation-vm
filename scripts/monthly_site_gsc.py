@@ -60,7 +60,7 @@ def main():
     parser.add_argument("--date", help="Reference date YYYY-MM-DD (default: today)")
     args = parser.parse_args()
 
-    ref = date.fromisoformat(args.date) if args.date else date.today()
+    ref = date.fromisoformat(args.date.replace("/", "-")) if args.date else date.today()
     cur_start, cur_end = get_month_range(ref)
     prev_ref   = date(cur_start.year, cur_start.month, 1) - timedelta(days=1)
     prev_start, prev_end = get_month_range(prev_ref)
