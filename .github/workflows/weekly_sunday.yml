@@ -9,11 +9,22 @@ on:
         description: "Reference date (YYYY-MM-DD). Use a past Sunday to test."
         required: false
         default: ""
+      script:
+        description: "Which script to run"
+        required: false
+        default: "All"
+        type: choice
+        options:
+          - All
+          - Weekly Site GA4
+          - Weekly Page GA4
 
 jobs:
   weekly-sunday:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repo
@@ -28,6 +39,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run weekly site GA4
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == 'Weekly Site GA4'
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
@@ -40,6 +52,7 @@ jobs:
           fi
 
       - name: Run weekly page GA4
+        if: inputs.script == '' || inputs.script == 'All' || inputs.script == 'Weekly Page GA4'
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
