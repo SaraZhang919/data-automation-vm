@@ -31,12 +31,13 @@ COL_ALL_USERS_CHANGE = 8
 COL_ORG_USERS_CHANGE = 11
 COL_ENGAGE = 13
 COL_KEY_EVENTS = 15
+HIGHLIGHT_COLS = [COL_ALL_USERS_CHANGE, COL_ORG_USERS_CHANGE, COL_ENGAGE, COL_KEY_EVENTS]
 
 
 def get_week_range(ref_date):
     """
-    Return (start, end) for the most recent complete Sun–Sat week before ref_date.
-    Running on Sunday 2026-05-10 → returns 2026-05-03 to 2026-05-09.
+    Return (start, end) for the most recent complete Sun-Sat week before ref_date.
+    Running on Sunday 2026-05-10 -> returns 2026-05-03 to 2026-05-09.
     """
     dow = ref_date.weekday()  # Mon=0 ... Sat=5, Sun=6
     days_back_to_sat = (dow - 5) % 7
@@ -162,12 +163,16 @@ def get_prev_metrics_from_sheet(rows, url):
     """Look up previous week's metrics for a URL from existing sheet data."""
     for row in rows[1:]:
         if len(row) > 5 and row[5] == url:
-            def si(idx): 
-                try: return int(row[idx]) if len(row) > idx else 0
-                except: return 0
+            def si(idx):
+                try:
+                    return int(row[idx]) if len(row) > idx else 0
+                except:
+                    return 0
             def sf(idx):
-                try: return float(row[idx]) if len(row) > idx else 0.0
-                except: return 0.0
+                try:
+                    return float(row[idx]) if len(row) > idx else 0.0
+                except:
+                    return 0.0
             return {
                 "all_users": si(7),
                 "org_users": si(10),
@@ -254,21 +259,29 @@ def main():
             ]
             row_index = existing_row_count + len(all_new_rows) + 1
 
+            # Clear possible inherited colors first; matched thresholds below override this.
+            for col in HIGHLIGHT_COLS:
+                highlight_ops.append((row_index, col, None))
+
             # Threshold checks
             lvl = thresholds.weekly_page_all_channel_active_users(metrics["all_users"], prev["all_users"])
-            if lvl: highlight_ops.append((row_index, COL_ALL_USERS_CHANGE, lvl))
+            if lvl:
+                highlight_ops.append((row_index, COL_ALL_USERS_CHANGE, lvl))
 
             lvl = thresholds.weekly_page_organic_active_users_page(metrics["org_users"], prev["org_users"])
-            if lvl: highlight_ops.append((row_index, COL_ORG_USERS_CHANGE, lvl))
+            if lvl:
+                highlight_ops.append((row_index, COL_ORG_USERS_CHANGE, lvl))
 
             lvl = thresholds.weekly_page_engagement_ratio(
                 metrics["engagement_rate"], prev["engagement_rate"],
                 prev["org_sessions"]
             )
-            if lvl: highlight_ops.append((row_index, COL_ENGAGE, lvl))
+            if lvl:
+                highlight_ops.append((row_index, COL_ENGAGE, lvl))
 
             lvl = thresholds.weekly_page_key_events(metrics["key_events"], prev["key_events"])
-            if lvl: highlight_ops.append((row_index, COL_KEY_EVENTS, lvl))
+            if lvl:
+                highlight_ops.append((row_index, COL_KEY_EVENTS, lvl))
 
             all_new_rows.append(row)
 
@@ -276,7 +289,7 @@ def main():
     if highlight_ops:
         batch_highlight(sheets, tab, highlight_ops)
 
-    print(f"Weekly by Page GA4 complete. {len(all_new_rows)} rows written, {len(highlight_ops)} highlights applied.")
+    print(f"Weekly by Page GA4 complete. {len(all_new_rows)} rows written, {len(highlight_ops)} format updates applied.")
 
 
 if __name__ == "__main__":
