@@ -115,6 +115,9 @@ class Sheets:
                 edits.append({"addSheet":{"properties":{"title":name,"gridProperties":{"rowCount":needed,"columnCount":max(26,len(head)),"frozenRowCount":1}}}})
             else:
                 p=self.tabs[name]
+                if name.endswith('Guide'):
+                    # Legacy guides merged each whole row, which discards the new detail columns.
+                    edits.append({'unmergeCells':{'range':{'sheetId':p['sheetId']}}})
                 edits.append({"updateSheetProperties":{"properties":{"sheetId":p['sheetId'],"gridProperties":{"rowCount":max(needed,p['gridProperties']['rowCount']),"columnCount":max(len(head),p['gridProperties']['columnCount'])}},"fields":"gridProperties.rowCount,gridProperties.columnCount"}})
         result=request(self.s,'POST',self.base+':batchUpdate',json={'requests':edits}).json()
         for reply in result.get('replies',[]):
