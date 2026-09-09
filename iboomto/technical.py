@@ -75,6 +75,7 @@ def sitemap_collect(store,web):
 
 def check_pages(store,web,urls,now):
     priority=priority_urls(store)
+    planned={r['url'] for r in store.read('Page Register Checks') if 'not_yet_launched' in r.get('status','')}
     priority|={SITE+'/' if lg=='en' else SITE+'/'+lg for lg in LANGS}
     candidates={r['url'] for r in urls if language(r['url']) is not None}|priority
     candidates|={r['url'] for r in store.read('SF Pages') if str(r.get('status','')).startswith(('4','5')) and language(r['url']) is not None}
@@ -116,6 +117,10 @@ def check_pages(store,web,urls,now):
         records.append(rec)
         time.sleep(.1)
     store.upsert('Technical Checks',records)
+    for f in issues:
+        if f['url'] in planned and f['kind'] in ('http_error','noindex','robots_blocked'):
+            f['severity']='observe';f['evidence']={'detail':f['evidence'],'context':'Page register explicitly marks this URL not yet launched; verify launch intent before escalating.'}
+    store.set('Technical Findings',issues)
     store.upsert('Technical History',[{**r,'id':digest([r['url'],r['checked_at']])} for r in records])
     store.upsert('Check Coverage',[{'id':now.date().isoformat(),'available_urls':len({r['url'] for r in urls}|priority),'attempted':len(records),'successful':len(checked),'checked_at':stamp()}])
     return issues,checked

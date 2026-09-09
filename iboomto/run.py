@@ -166,6 +166,7 @@ def main():
     if args.mode not in ('manual','deep'):
         task('Website logs',lambda:{'status':'not_configured','detail':'Awaiting website access-log archive; installer logs excluded'})
     if args.mode=='daily':
+        if args.source not in ('all','technical'):findings.extend(store.read('Technical Findings'))
         findings.extend(seo_findings(store))
         from .maintenance import maintain
         task('Storage maintenance',lambda:maintain(store,today))

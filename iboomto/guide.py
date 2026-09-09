@@ -1,5 +1,5 @@
 """The in-workbook guide follows actual tab IDs, including renamed tabs."""
-from .core import stamp
+import os
 
 DESCRIPTIONS={
  'GA4 Data Quality':('数据质量','对照渠道行合计与同范围站点API总量；不一致显示non_additive_review，保留源值，不强行缩放。'),
@@ -29,6 +29,7 @@ DESCRIPTIONS={
  'Sitemap History':('变化记录','仅新增、移除、lastmod 变化；只有完整成功采集才能判定移除。'),
  'Sitemap Crawl Comparison':('技术对照','Sitemap 与最近 SF 快照比较；缺少入链仅是孤立页候选，不能直接证明孤立。'),
  'Technical Checks':('最新状态','页面 HTTP、canonical、robots、hreflang 等最新检查。'),
+ 'Technical Findings':('规则证据','最新检查产生的问题证据；人工标记未上线的页面暂作观察，不当作线上关键页故障。'),
  'Technical History':('历史检查','有日期的检查证据，按保留期归档。'),
  'Check Coverage':('覆盖核对','实际检查数量和成功数量；轮询或失败页面必须明确。'),
  'URL Inspection':('收录诊断','Google 已知索引版本：verdict / coverage_state / canonical / last_crawl_time。api_status=success 只表示 API 调用成功。全站趋势看 GSC 网页索引。'),
@@ -49,6 +50,7 @@ DESCRIPTIONS={
 }
 
 def update_guide(store,report=None):
+    name=next((n for n in store.tabs if n!='Guide' and n.endswith('Guide')),'Guide')
     rows=[]
     topics=[
         ('GA过滤规则','所有GA统计均使用 hostName EXACT www.iboomto.com，精确匹配；不是 CONTAINS，也不是所有 *.iboomto.com。语言取相应独立 GA 属性。'),
@@ -70,8 +72,10 @@ def update_guide(store,report=None):
     for book in (store,report):
         if not book:continue
         names=set(book.tabs)|set(book.dirty)
-        for name in sorted(names):
-            if name=='Guide':continue
-            category,detail=DESCRIPTIONS.get(name,('系统记录','自动化内部记录；请勿改名或删除表头。'))
-            rows.append({'类别':category,'表格或主题':name,'说明':detail,'链接':book.link(name)})
-    store.set('Guide',rows,headers=['类别','表格或主题','说明','链接'])
+        for tab_name in sorted(names):
+            if tab_name.endswith('Guide'):continue
+            category,detail=DESCRIPTIONS.get(tab_name,('系统记录','自动化内部记录；请勿改名或删除表头。'))
+            rows.append({'类别':category,'表格或主题':tab_name,'说明':detail,'链接':book.link(tab_name)})
+    if os.environ.get('IBOOMTO_AI_REPORTS_ENABLED','').lower()!='true':
+        rows.append({'类别':'当前运行状态','表格或主题':'LLM 分析授权','说明':'扩展后的数据传输目前暂未启用；采集和事实视图正常运行。获准将汇总证据发送到 OpenAI 后设置 IBOOMTO_AI_REPORTS_ENABLED=true。','链接':''})
+    store.set(name,rows,headers=['类别','表格或主题','说明','链接'])

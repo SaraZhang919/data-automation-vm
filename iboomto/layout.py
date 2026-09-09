@@ -25,7 +25,7 @@ def format_columns(sid,name,head,count,new_layout):
             requests.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':i,'endIndex':i+1},'properties':{'pixelSize':width},'fields':'pixelSize'}})
     if new_layout and head and name.startswith(('GA4 ','GSC ','SF ','Sitemap','URL Inspection','Comparisons')):
         requests.append({'setBasicFilter':{'filter':{'range':{'sheetId':sid,'startRowIndex':0,'endColumnIndex':len(head)}}}})
-    if new_layout and name=='Guide':
+    if new_layout and name.endswith('Guide'):
         for i,width in enumerate((140,250,960,380)):
             requests.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':i,'endIndex':i+1},'properties':{'pixelSize':width},'fields':'pixelSize'}})
         requests.append({'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':count+1,'endColumnIndex':len(head)},'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}})

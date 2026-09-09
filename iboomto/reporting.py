@@ -71,7 +71,7 @@ def evidence(store,statuses,issues,kind='daily'):
         if tab in ('GA4 Site','GSC Site'):
             latest.extend({**r,'table':tab} for r in selected)
             coverage.append({'source':tab,'period':period,'latest_dates':dates,'source_link':store.link(tab) if hasattr(store,'link') else '',
-                             'latest_final_dates':{lg:max((r['end'] for r in rows if r.get('language')==lg and r.get('quality') in ('final','mature')),default='') for lg in dates}})
+                             'latest_final_dates':{lg:max((r.get('final_through','') if tab=='GSC Site' else r['end'] if r.get('quality')=='mature' else '' for r in rows if r.get('language')==lg),default='') for lg in dates}})
         elif tab=='GA4 Events':
             details[tab]=[{k:r.get(k) for k in ('language','start','end','event_name','eventCount','totalUsers','quality')} for r in selected if r.get('event_name')=='software_download']
             details['tracking_checks']=[{k:r.get(k) for k in ('language','start','end','data_status','quality','event_count')} for r in store.read('GA4 Business Events') if r.get('period')==period and r.get('data_status')!='returned']

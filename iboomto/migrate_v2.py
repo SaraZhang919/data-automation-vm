@@ -32,6 +32,10 @@ def main():
         latest=max(store.read('Import Batches'),key=lambda r:(r.get('batch_date',''),r.get('checked_at','')),default={})
         safe=['Priority Pages','Page Map','Event Candidates','Metric Comparisons','Period Comparisons']
         if latest.get('status')=='success' and latest.get('schema_version')=='compact-v2':safe+=['SF Links Latest','SF Hreflang Latest']
+        if 'Guide' in store.tabs and any(n!='Guide' and n.endswith('Guide') for n in store.tabs):safe+=['Guide']
+        # Legacy all-property detail duplicates the new per-language selections; totals remain in GSC Site.
+        for tab in ('GSC Pages','GSC Queries'):
+            store.set(tab,[r for r in store.read(tab) if r.get('language')!='all'])
         remove(store,safe);update_guide(store,report);store.flush();print(json.dumps({'removed':safe}));return
     rename(store,'GA4 Daily','GA4 Site');rename(store,'GSC Daily','GSC Site');rename(report,'Daily History','Report History')
     # Consolidate any existing cycle tabs without recomputing users or losing source records.
