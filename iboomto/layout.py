@@ -16,7 +16,7 @@ def format_columns(sid,name,head,count,new_layout):
     for i,key in enumerate(head):
         rg={'sheetId':sid,'startRowIndex':1,'endRowIndex':max(2,count+1),'startColumnIndex':i,'endColumnIndex':i+1}
         fmt=None
-        if key in PERCENT:fmt={'type':'PERCENT','pattern':'0.00%'}
+        if key in PERCENT or key.endswith('_session_rate') or key=='average_scroll_depth':fmt={'type':'PERCENT','pattern':'0.00%'}
         elif key in ('change_pp','drop_percentage_points'):fmt={'type':'NUMBER','pattern':'0.00" pp"'}
         elif key in ('key_events_per_user','position','averageSessionDuration'):fmt={'type':'NUMBER','pattern':'0.00'}
         if fmt:requests.append({'repeatCell':{'range':rg,'cell':{'userEnteredFormat':{'numberFormat':fmt}},'fields':'userEnteredFormat.numberFormat'}})

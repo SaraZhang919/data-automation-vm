@@ -25,7 +25,8 @@ def generate(store,report,statuses,issues,run_id,report_date,kind='daily',questi
         payload['latest_metrics']=[];payload['detail_summaries']={};payload['comparisons']=[]
     period=payload['report_period'];name='Deep Analysis' if kind=='deep' else 'Report History'
     dates=sorted({(r['start'],r['end']) for r in payload['latest_metrics']})
-    fingerprint=digest([stable(payload),kind,question,selection])
+    from .llm_evidence import compact_evidence
+    fingerprint=digest([compact_evidence(payload),kind,question,selection])
     rid=digest([str(report_date),kind,fingerprint])
     history=report.read(name)
     prior=next((r for r in history if r.get('id')==rid and r.get('ai_status')=='success'),None)

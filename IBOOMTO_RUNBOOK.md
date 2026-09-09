@@ -51,7 +51,7 @@ Main-sheet retention: daily detail 90 days, site daily 365 days, weekly 104 week
 
 GOOGLE_CREDENTIALS remains the existing service-account JSON in GitHub Actions Secrets; OPENAI_API_KEY remains the existing OpenAI secret. Routine scopes are analytics.readonly, webmasters.readonly, spreadsheets, drive.readonly. Only the archive path requests the Drive scope needed to update the specified existing private file; its service-account ACLs still govern access. No project Owner or cloud-platform role is required. CLARITY_API_TOKEN is optional; website access logs remain a later integration and installer logs are excluded.
 
-The expanded report evidence is currently gated by IBOOMTO_AI_REPORTS_ENABLED=true. Until explicitly authorized, collectors and factual report views run but no OpenAI report request is made. The existing synthetic connection test is separate.
+The owner authorized the expanded analysis evidence transfer to OpenAI. IBOOMTO_AI_REPORTS_ENABLED=true enables it; the switch can still pause analysis without pausing collection. The existing synthetic connection test is separate.
 
 Model: gpt-5.6-sol, medium for daily/weekly/monthly, high for deep. Requested and actual response model, usage, prompt version and rule version are recorded. No silent model fallback. All API calls use fixed provider HTTPS endpoints and errors do not echo secrets. Actions run only on main, official actions are SHA-pinned, and checkout does not persist credentials.
 
@@ -64,3 +64,16 @@ Actions → iBoomto Monitor: manual mode requires start/end, source, language, o
 Run `python -m unittest discover -s tests -v`. Tests cover source timezone boundaries, exact host scope, mandatory manual pages, missing vs zero, GSC camelCase publication metadata, full-period users, report isolation/revisions, and fail-closed retention.
 
 One-time migration uses iboomto.backup and iboomto.migrate_v2. Verified full-grid backups include formulas, formats, metadata and values for both workbooks; they live under ignored outputs, never in the public repository. Retired tabs are removed only after a successful compact import and data verification. Use iboomto.setup_archive to verify a human-owned private archive before retention starts.
+
+
+## Compact LLM evidence and weekly Clarity
+
+The LLM receives a separate columnar analytical view, not the full workbook or raw server logs. Repeated storage fields and URLs with query strings are removed; unavailable comparison rows are grouped by reason and period while preserving counts, metrics and languages. Selected GA/GSC page/query aggregate values, source quality, dates and every issue remain available. Deep mode reads explicitly selected historical aggregates. Oversized evidence is partitioned across nested dictionaries/tables without dropping sections. No new token spending cap is imposed.
+
+AI Usage exposes provider-reported input_tokens, output_tokens, total_tokens and reasoning_tokens (a subset of output), plus input_characters and evidence_schema. Character reduction is not an exact token/cost estimate. Cache keys use the compact evidence, model, prompt/rule versions and question.
+
+Clarity now makes one unsegmented request on Tuesday at 17:00 JST, numOfDays=3, and stores one project-level row in Clarity Snapshots. No URL/device breakdown is requested or stored. The API maximum is a rolling 72-hour lookback: this is a weekly snapshot, **not a complete calendar-week total**. Daily reports may cite the latest snapshot with its original window; the converted legacy snapshot remains labelled rolling_24h. Metrics include traffic, dead/rage/error clicks, script errors, scroll depth and engagement time. Project totals can include other hosts and must not be equated with filtered GA production totals.
+
+Reference: https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api
+
+Actions mode report-only regenerates analysis from existing stored facts without rerunning source APIs. It is suitable after enabling LLM or refining report formatting.

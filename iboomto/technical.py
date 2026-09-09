@@ -203,32 +203,32 @@ def sf_import(session,store,now):
     return issues,{'imported':imported,'latest_batch':latest_time,'age_days':age,'status':state}
 
 def clarity_collect(store,token,now):
-    if not token:return {'status':'not_configured','detail':'CLARITY_API_TOKEN missing'}
-    # Skip repeats on the same JST day. Each view consumes one of the project-wide 10 requests.
     from zoneinfo import ZoneInfo
-    day=now.astimezone(ZoneInfo('Asia/Tokyo')).date().isoformat()
-    done={r['id'] for r in store.read('Clarity Requests') if r.get('status')=='success'}
-    session=requests.Session(); session.headers['Authorization']='Bearer '+token
-    for view in ('overall','URL','Device'):
-        rid=digest([day,view])
-        if rid in done:continue
-        ledger=store.read('Clarity Requests')
-        attempts=sum(int(r.get('attempts',0)) for r in ledger if r.get('day')==day)
-        if attempts>=8:return {'status':'quota_guard','detail':'Local request allowance exhausted; leave capacity for other clients'}
-        params={'numOfDays':1}
-        if view!='overall':params['dimension1']=view
-        # No automatic HTTP retry for this low daily-quota API.
-        r=session.get('https://www.clarity.ms/export-data/api/v1/project-live-insights',params=params,timeout=60)
-        previous=next((x for x in ledger if x.get('id')==rid),{})
-        store.upsert('Clarity Requests',[{'id':rid,'day':day,'view':view,'attempts':int(previous.get('attempts',0))+1,'status':'success' if r.status_code==200 else 'failed','http_status':r.status_code,'at':stamp()}]);store.flush()
-        if r.status_code!=200:raise ApiFailure(f'Clarity HTTP {r.status_code}')
-        payload=r.json();packed=[]
-        for metric in payload:
-            infos=metric.get('information',[])
-            for i,info in enumerate(infos):
-                url=info.get('URL','')
-                packed.append({'id':digest([rid,metric.get('metricName'),i]),'day':day,'view':view,'metric':metric.get('metricName'),
-                               'window_start':(now-timedelta(hours=24)).isoformat(),'window_end':now.isoformat(),'window_type':'rolling_24h','timezone':'UTC',
-                               'language':language(url) if url else '', 'coverage':'possibly_truncated' if len(infos)>=1000 else 'returned_rows','data':info,'collected_at':stamp()})
-        store.upsert('Clarity Daily',packed)
-    return {'status':'success'}
+    from .clarity_summary import CORE,flatten
+    local=now.astimezone(ZoneInfo('Asia/Tokyo'))
+    # Tuesday daily workflow at 17:00 JST. Other days make no Clarity API call.
+    if local.weekday()!=1:
+        return {'status':'scheduled_weekly','detail':'Tuesday 17:00 JST; latest snapshot remains available'}
+    if not token:return {'status':'not_configured','detail':'CLARITY_API_TOKEN missing'}
+    day=local.date().isoformat();rid=digest(['clarity-weekly-overall-72h',day])
+    ledger=store.read('Clarity Requests')
+    if any(r.get('id')==rid and r.get('status')=='success' for r in ledger):return {'status':'cached','day':day}
+    prior=next((r for r in ledger if r.get('id')==rid),{})
+    if int(prior.get('attempts',0))>=3:return {'status':'retry_limit','detail':'Weekly snapshot failed; inspect request status'}
+    session=requests.Session();session.headers['Authorization']='Bearer '+token
+    response=session.get('https://www.clarity.ms/export-data/api/v1/project-live-insights',params={'numOfDays':3},timeout=60)
+    record={'id':rid,'day':day,'view':'overall','cadence':'weekly','num_of_days':3,'attempts':int(prior.get('attempts',0))+1,'http_status':response.status_code,'at':stamp()}
+    if response.status_code!=200:
+        store.upsert('Clarity Requests',[{**record,'status':'failed'}]);store.flush();raise ApiFailure(f'Clarity HTTP {response.status_code}')
+    metrics={};ambiguous=[]
+    for item in response.json():
+        name=item.get('metricName');items=item.get('information',[])
+        if name not in CORE:continue
+        if len(items)!=1:ambiguous.append(name);continue
+        metrics[name]=items[0]
+    row=flatten(metrics,{'id':rid,'day':day,'window_start':(now-timedelta(hours=72)).isoformat(),'window_end':now.isoformat(),
+                        'window_type':'rolling_72h','timezone':'UTC','coverage':'project_aggregate','collected_at':stamp()})
+    row['ambiguous_metrics']=ambiguous
+    store.upsert('Clarity Snapshots',[row]);store.flush()
+    store.upsert('Clarity Requests',[{**record,'status':'success' if not ambiguous and not row['missing_metrics'] else 'partial'}])
+    return {'status':'partial' if ambiguous or row['missing_metrics'] else 'success','rows':1,'window_type':'rolling_72h','not_full_week':True}

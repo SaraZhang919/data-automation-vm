@@ -17,7 +17,7 @@ from .pages import priority_urls
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('--mode',choices=['daily','weekly-preview','monthly','manual','deep'],default='daily')
+    p.add_argument('--mode',choices=['daily','weekly-preview','monthly','manual','deep','report-only'],default='daily')
     p.add_argument('--env-file');p.add_argument('--write',action='store_true');p.add_argument('--no-ai',action='store_true')
     p.add_argument('--start');p.add_argument('--end');p.add_argument('--language',choices=['all',*LANGS],default='all')
     p.add_argument('--source',choices=['all','ga','gsc','technical','sf','clarity'],default='all')
@@ -79,7 +79,7 @@ def main():
                     task('Manual GA4 '+prop['language']+' '+role,lambda prop=prop,rs=rs,re=re:collect_ga(api,store,prop,rs,re,now,'manual',args.url,args.prefix,True))
             if args.source in ('all','gsc'):
                 task('Manual GSC '+role,lambda rs=rs,re=re:collect_gsc(api,store,rs,re,'manual',args.language,args.url,args.prefix,True))
-    elif args.mode!='deep':
+    elif args.mode not in ('deep','report-only'):
         if args.mode=='daily':
             if args.source in ('all','ga'):
                 for prop in props:
@@ -163,8 +163,16 @@ def main():
                     period('GA4',rs,re,'rolling28');period('GSC',rs,re,'rolling28')
         if args.mode=='monthly':
             start,end=previous_month(today);period('GA4',start,end,'monthly');period('GSC',start,end,'monthly')
-    if args.mode not in ('manual','deep'):
+    if args.mode not in ('manual','deep','report-only'):
         task('Website logs',lambda:{'status':'not_configured','detail':'Awaiting website access-log archive; installer logs excluded'})
+    if args.mode=='report-only':
+        latest_status={}
+        for row in store.read('Run Status'):
+            name=row.get('source','')
+            if 'Report' in name:continue
+            if name not in latest_status or row.get('finished_at','')>latest_status[name].get('finished_at',''):latest_status[name]=row
+        statuses.extend(latest_status.values())
+        findings.extend(store.read('Technical Findings'));findings.extend(seo_findings(store))
     if args.mode=='daily':
         if args.source not in ('all','technical'):findings.extend(store.read('Technical Findings'))
         findings.extend(seo_findings(store))

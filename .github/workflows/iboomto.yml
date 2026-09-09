@@ -9,7 +9,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [daily, weekly-preview, monthly, manual, deep]
+        options: [daily, weekly-preview, monthly, manual, deep, report-only]
         default: daily
       source:
         type: choice
