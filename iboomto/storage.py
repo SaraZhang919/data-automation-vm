@@ -116,7 +116,8 @@ class Sheets:
                 prop=reply['addSheet']['properties'];self.tabs[prop['title']]=prop
         writes=[];formats=[]
         def cell(v):
-            if isinstance(v,(dict,list)):v=json.dumps(v,ensure_ascii=False,separators=(',',':'))
+            if isinstance(v,list) and all(isinstance(x,str) for x in v):v='\n\n'.join(v)
+            elif isinstance(v,(dict,list)):v=json.dumps(v,ensure_ascii=False,separators=(',',':'))
             if isinstance(v,str) and len(v)>49000:raise ApiFailure('Cell exceeds Sheets limit; split evidence before writing')
             return '' if v is None else v
         for name in names:
@@ -131,6 +132,8 @@ class Sheets:
                 {"repeatCell":{"range":{"sheetId":sid,"startRowIndex":0,"endRowIndex":1},"cell":{"userEnteredFormat":{"backgroundColor":{"red":.10,"green":.20,"blue":.30},"textFormat":{"bold":True,"foregroundColor":{"red":1,"green":1,"blue":1}},"wrapStrategy":"WRAP"}},"fields":"userEnteredFormat"}},
                 {"updateSheetProperties":{"properties":{"sheetId":sid,"gridProperties":{"frozenRowCount":1}},"fields":"gridProperties.frozenRowCount"}}
             ])
+            if name=='AI Cache':
+                formats.append({'updateSheetProperties':{'properties':{'sheetId':sid,'hidden':True},'fields':'hidden'}})
             # Keep working tables readable; bounded row formatting never touches Properties.
             formatting=[{'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':len(rows)+1,'endColumnIndex':len(head)},
                                       'cell':{'userEnteredFormat':{'wrapStrategy':'CLIP','textFormat':{'fontFamily':'Arial','fontSize':10},'verticalAlignment':'TOP'}},'fields':'userEnteredFormat'}}] if rows else []
@@ -138,6 +141,13 @@ class Sheets:
                 formatting += [{'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':2,'endIndex':3},'properties':{'pixelSize':760},'fields':'pixelSize'}},
                                {'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':len(rows)+1,'startColumnIndex':2,'endColumnIndex':3},'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}},
                                {'autoResizeDimensions':{'dimensions':{'sheetId':sid,'dimension':'ROWS','startIndex':1,'endIndex':len(rows)+1}}}]
+            if name in ('Issues','Daily History','Deep Analysis','AI Usage','Data Status'):
+                for index,key in enumerate(head):
+                    width=600 if key in ('summary','findings','actions','limitations','evidence') else 480 if key=='url' else 230 if key.endswith('_at') or key in ('at','first_seen','last_seen','source') else 165
+                    formatting.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':index,'endIndex':index+1},'properties':{'pixelSize':width},'fields':'pixelSize'}})
+                    if key in ('summary','findings','actions','limitations','evidence','url') and rows:
+                        formatting.append({'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':len(rows)+1,'startColumnIndex':index,'endColumnIndex':index+1},'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}})
+                if rows:formatting.append({'autoResizeDimensions':{'dimensions':{'sheetId':sid,'dimension':'ROWS','startIndex':1,'endIndex':len(rows)+1}}})
             formats.extend(formatting)
         batch=[];size=0
         for write in writes:

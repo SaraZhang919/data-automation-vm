@@ -1,6 +1,10 @@
 name: iBoomto Monitor
 
 on:
+  schedule:
+    - cron: '0 8 * * *'   # Daily 17:00 JST; Tuesday includes GA weekly revision + GSC weekly.
+    - cron: '0 11 * * 0'  # Sunday GA weekly preview at 20:00 JST.
+    - cron: '0 7 4 * *'   # Previous calendar month on the fourth at 16:00 JST.
   workflow_dispatch:
     inputs:
       mode:

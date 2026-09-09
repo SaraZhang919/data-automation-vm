@@ -91,7 +91,9 @@ def check_pages(store,web,urls,now):
             rec.update({'status':r.status_code,'final_url':r.url,'response_seconds':r.elapsed.total_seconds(),'canonical':urljoin(r.url,canonical.get('href','')) if canonical else '',
                         'robots':directives,'googlebot_allowed':robots.can_fetch('Googlebot',url) if robots else '', 'hreflang':hreflang,'check_status':'success'})
             if robots_status!='unavailable':checked.add(url)
-            if r.status_code>=400:issues.append(issue('http_error',url,'red' if url in priority else 'yellow',f'Confirmed HTTP {r.status_code}',rec['checked_at']))
+            if r.status_code in (403,429):
+                issues.append(issue('monitor_access_blocked',url,'yellow',f'Monitor received HTTP {r.status_code}; verify user and verified crawler access separately',rec['checked_at']))
+            elif r.status_code>=400:issues.append(issue('http_error',url,'red' if url in priority else 'yellow',f'Confirmed HTTP {r.status_code}',rec['checked_at']))
             if 'noindex' in directives.lower():issues.append(issue('noindex',url,'red' if url in priority else 'yellow',directives,rec['checked_at']))
             if robots and not rec['googlebot_allowed']:issues.append(issue('robots_blocked',url,'red' if url in priority else 'yellow','Googlebot blocked by robots.txt',rec['checked_at']))
             if '//' in urlsplit(url).path:issues.append(issue('double_slash',url,'yellow','Raw sitemap path contains //',rec['checked_at']))

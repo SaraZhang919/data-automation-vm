@@ -2,6 +2,8 @@
 
 Cloud entrypoint: **Actions → iBoomto Monitor**. Data collection and calculations use Python; only report interpretation uses the OpenAI API.
 
+Deployment (2026-09-09): implemented on main. Fourteen unit tests, a local complete run including the first GPT-5.6 Sol report, both cloud manual-source checks, and a complete cloud run passed. Full cloud validation run 34322957257 completed in about 3m34s with the issued report cached. Scheduled triggers are configured below. OpenAI credential transfer to GitHub is awaiting explicit user authorization; until configured, new reports retain factual metrics and show AI failure. Clarity and website logs remain not configured. Business event mappings require tracking-trigger verification.
+
 ## Outputs
 
 - [IBT - Website Data](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit): source data, configurations, ingestion state, revisions, technical snapshots, period statistics, and manual results. `Properties` is read-only to the monitor.

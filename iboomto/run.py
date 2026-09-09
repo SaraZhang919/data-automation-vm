@@ -159,7 +159,7 @@ def main():
         event_candidates(store)
         findings.extend(seo_findings(store))
     store.flush()
-    if report:
+    if report and args.mode!='manual':
         def rules_job():
             new=metric_findings(store);findings.extend(new);return {'status':'success','findings':len(new)}
         task('Metric rules',rules_job)
