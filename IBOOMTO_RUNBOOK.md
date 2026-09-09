@@ -2,7 +2,7 @@
 
 Cloud entrypoint: **Actions → iBoomto Monitor**. Data collection and calculations use Python; only report interpretation uses the OpenAI API.
 
-Deployment (2026-09-09): implemented on main. Fourteen unit tests, a local complete run including the first GPT-5.6 Sol report, both cloud manual-source checks, and a complete cloud run passed. Full cloud validation run 34322957257 completed in about 3m34s with the issued report cached. Scheduled triggers are configured below. OpenAI credential transfer to GitHub is awaiting explicit user authorization; until configured, new reports retain factual metrics and show AI failure. Clarity and website logs remain not configured. Business event mappings require tracking-trigger verification.
+Deployment (2026-09-09): implemented on main. Fourteen unit tests, a local complete run including the first GPT-5.6 Sol report, both cloud manual-source checks, and a complete cloud run passed. Full cloud validation run 34322957257 completed in about 3m34s with the issued report cached. Scheduled triggers are configured below. The user explicitly authorized the OpenAI credential transfer, but automatic approval review blocked transfer to this public repository. No key was transferred. The owner must add OPENAI_API_KEY in GitHub Actions Secrets directly; until configured, new reports retain factual metrics and show AI failure. Clarity and website logs remain not configured. Business event mappings require tracking-trigger verification.
 
 ## Outputs
 
@@ -28,6 +28,10 @@ GA mature means 48 hours after the source calendar day closed; this is an operat
 Existing `GOOGLE_CREDENTIALS` is reused. It must identify gsc-api-service@gsc-api-project-453403.iam.gserviceaccount.com. GA/GSC read permission and write access to the two workbooks are needed. Drive API must be enabled for the project, with read access to the SF folder. Admin API is not required.
 
 `OPENAI_API_KEY` powers GPT-5.6 Sol (`medium` daily, `high` deep). No silent fallback model. `CLARITY_API_TOKEN` is optional until supplied. Store credentials only in Actions Secrets; do not commit keys or raw private exports. Old `SHEET_ID` is deliberately unused by iBoomto, so Vidmud's historical target is not changed.
+
+Owner setup: open https://github.com/SaraZhang919/data-automation-vm/settings/secrets/actions and create repository secret `OPENAI_API_KEY`, entering the key directly in GitHub, never in a chat, source file, issue, or ordinary variable. Afterwards, run `iBoomto Monitor` on main with mode `deep` and a short question to verify a fresh cloud API invocation without replacing an issued daily report. Add `CLARITY_API_TOKEN` through the same Secrets page when available.
+
+The monitor runs only on main and scheduled/manual triggers. Official checkout/setup actions are pinned to verified commit SHAs; checkout does not persist its GitHub credential. The GitHub token has read-only contents permission, and API secrets are exposed only to the collection/report step. The OpenAI credential is sent only to the fixed HTTPS OpenAI endpoint; API errors record the HTTP status rather than response bodies. These measures do not prevent trusted repository writers from modifying future workflows: repository write/admin access must remain limited to trusted people.
 
 The monitor scopes Google API access to analytics.readonly, webmasters.readonly, spreadsheets, drive.readonly. It does not require project Owner or cloud-platform for routine operation. One-time API enablement is separate from scheduled code.
 
