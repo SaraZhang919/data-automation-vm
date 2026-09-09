@@ -9,6 +9,13 @@ from iboomto.maintenance import maintain,expired
 from iboomto.technical import sitemap_collect
 
 class MigrationTests(unittest.TestCase):
+    def test_unapproved_ai_evidence_never_leaves_process(self):
+        from iboomto.reporting import ai_analyse
+        from iboomto.storage import ApiFailure
+        with patch.dict('os.environ',{},clear=True),patch('iboomto.reporting.requests.post') as post:
+            with self.assertRaises(ApiFailure):ai_analyse({'private_metric':123},MemoryStore())
+            post.assert_not_called()
+
     def test_manual_pages_never_capped_and_deep_english(self):
         s=MemoryStore();s.set('Page name - manual management',[{'Urls':'https://www.iboomto.com/essential-tools/a/b','Lan':'EN','Page Name':'Deep'}, {'Urls':'https://www.iboomto.com/zh-tw','Lan':'TW'}])
         pages=registry(s);chosen=selected_pages(['https://www.iboomto.com/p'+str(i) for i in range(30)],pages,'en')
