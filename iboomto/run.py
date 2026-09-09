@@ -12,7 +12,8 @@ from .storage import google_session,Sheets
 from .analytics import Analytics,collect_ga,collect_gsc,collect_business_events
 from .technical import PublicSite,sitemap_collect,check_pages,sf_import,clarity_collect
 from .reporting import initialise_config,metric_findings,reconcile_issues,generate_report
-from .seo import seo_findings,event_candidates
+from .seo import seo_findings
+from .pages import priority_urls
 
 def main():
     p=argparse.ArgumentParser()
@@ -32,7 +33,7 @@ def main():
         args.language=language(args.url or args.prefix)
     if args.no_ai:os.environ.pop('OPENAI_API_KEY',None)
     now=datetime.now(timezone.utc);today=now.astimezone(ZoneInfo('Asia/Tokyo')).date()
-    run_id=os.environ.get('GITHUB_RUN_ID',digest([stamp(),args.mode]));statuses=[];findings=[];checked=set()
+    run_id=os.environ.get('GITHUB_RUN_ID',digest([stamp(),args.mode]));statuses=[];findings=[];checked=set();refreshed_periods=set()
     session=google_session();store=Sheets(session,os.environ.get('IBOOMTO_SHEET_ID',DATA_ID),args.write)
     report_id=os.environ.get('IBOOMTO_REPORT_SHEET_ID')
     report=Sheets(session,report_id,args.write) if report_id else None
@@ -62,7 +63,9 @@ def main():
             store.upsert('Period Status',[{'id':key,'source':source,'property':prop['id'],'period':kind,'start':str(start),'end':str(end),'status':'pending','updated_at':stamp()}])
             def run_period(prop=prop,key=key):
                 result=collect_ga(api,store,prop,start,end,now,kind) if source=='GA4' else collect_gsc(api,store,start,end,kind)
+                if source=='GA4':collect_business_events(api,store,prop,start,end,now,kind)
                 store.upsert('Period Status',[{'id':key,'source':source,'property':prop['id'],'period':kind,'start':str(start),'end':str(end),'status':result['status'],'updated_at':stamp()}])
+                refreshed_periods.add(kind)
                 return result
             task(source+' '+kind+' '+prop['language'],run_period)
 
@@ -89,6 +92,8 @@ def main():
                     task('GA4 '+prop['language'],ga_job)
                     def business_job(prop=prop):
                         start,end=daily_window(now,api.ga_timezone(prop['id']))
+                        if args.start:start=max(LAUNCH,date.fromisoformat(args.start))
+                        if args.end:end=date.fromisoformat(args.end)
                         return collect_business_events(api,store,prop,start,end,now)
                     task('Business events '+prop['language'],business_job)
             if args.source in ('all','gsc'):
@@ -112,22 +117,27 @@ def main():
                 task('Technical checks',checks_job)
                 def inspect_job():
                     old={r['url']:r for r in store.read('URL Inspection')}
-                    priority={r['url'] for r in store.read('Priority Pages') if r.get('enabled') not in (False,'FALSE','false')}
+                    priority=priority_urls(store)
                     # Rotate 30 URLs by default; hard ceiling 100. Avoid holding the whole daily report for a slow secondary API.
                     limit=min(100,max(9,int(os.environ.get('IBOOMTO_INSPECTION_DAILY_LIMIT','30'))))
-                    urls=sorted({r['url'] for r in sitemap_urls},key=lambda u:(u not in priority,u in old,old.get(u,{}).get('checked_at',''),u))[:limit]
+                    urls=sorted({r['url'] for r in sitemap_urls}|priority,key=lambda u:(u in old,old.get(u,{}).get('checked_at',''),u not in priority,u))[:limit]
                     records=[];failed=0
                     worker=threading.local()
                     def inspect_one(u):
                         try:
                             if not hasattr(worker,'api'):worker.api=Analytics(google_session())
                             result=worker.api.inspection(u)
-                            return {'id':u,'url':u,'checked_at':stamp(),'status':'success','result':result}
-                        except Exception as e:return {'id':u,'url':u,'checked_at':stamp(),'status':'failed','error_type':type(e).__name__}
+                            state=result.get('indexStatusResult',{})
+                            return {'id':u,'url':u,'checked_at':stamp(),'api_status':'success',
+                                'verdict':state.get('verdict',''),'coverage_state':state.get('coverageState',''),
+                                'last_crawl_time':state.get('lastCrawlTime',''),'google_canonical':state.get('googleCanonical',''),
+                                'user_canonical':state.get('userCanonical',''),'page_fetch_state':state.get('pageFetchState',''),
+                                'inspection_link':result.get('inspectionResultLink',''),'result':result}
+                        except Exception as e:return {'id':u,'url':u,'checked_at':stamp(),'api_status':'failed','error_type':type(e).__name__}
                     with ThreadPoolExecutor(max_workers=4) as pool:
                         for future in as_completed([pool.submit(inspect_one,u) for u in urls]):
                             row=future.result();records.append(row)
-                            if row['status']=='failed':failed+=1
+                            if row['api_status']=='failed':failed+=1
                     store.upsert('URL Inspection',records)
                     return {'status':'partial' if failed else 'success','checked':len(records),'failed':failed}
                 task('URL Inspection',inspect_job)
@@ -156,18 +166,29 @@ def main():
     if args.mode not in ('manual','deep'):
         task('Website logs',lambda:{'status':'not_configured','detail':'Awaiting website access-log archive; installer logs excluded'})
     if args.mode=='daily':
-        event_candidates(store)
         findings.extend(seo_findings(store))
+        from .maintenance import maintain
+        task('Storage maintenance',lambda:maintain(store,today))
     store.flush()
     if report and args.mode!='manual':
         def rules_job():
             new=metric_findings(store);findings.extend(new);return {'status':'success','findings':len(new)}
         task('Metric rules',rules_job)
+        from .core import issue
+        for r in statuses:
+            if r['status']=='failed' and r['source'].startswith(('GA4 ','GSC','Business events')):
+                findings.append(issue('collection_failed',r['source'],'red',r['detail'],r['finished_at'],'Run Status'))
         issues=reconcile_issues(report,findings,checked,store)
         kind={'weekly-preview':'weekly_preview','monthly':'monthly','deep':'deep'}.get(args.mode,'daily')
         if args.mode!='manual':
             selection={'start':args.start,'end':args.end,'language':args.language,'url':args.url,'prefix':args.prefix}
             task('Report',lambda:generate_report(store,report,statuses,issues,run_id,today,kind,args.question,args.force,selection))
+            if args.mode=='daily':
+                for cycle in ('weekly','monthly'):
+                    if cycle in refreshed_periods:
+                        task(cycle.title()+' Report',lambda cycle=cycle:generate_report(store,report,statuses,issues,run_id,today,cycle,force=args.force))
+            from .guide import update_guide
+            update_guide(store,report)
         report.upsert('Data Status',statuses);report.flush()
     elif args.mode!='manual':task('Report',lambda:{'status':'not_configured','detail':'IBOOMTO_REPORT_SHEET_ID missing'})
     store.flush()

@@ -1,67 +1,64 @@
-# iBoomto monitoring
+# iBoomto monitoring — v2
 
-Cloud entrypoint: **Actions → iBoomto Monitor**. Data collection and calculations use Python; only report interpretation uses the OpenAI API.
-
-Deployment (2026-09-09): implemented on main. Fourteen unit tests, a local complete run including the first GPT-5.6 Sol report, both cloud manual-source checks, and a complete cloud run passed. Full cloud validation run 34322957257 completed in about 3m34s with the issued report cached. The owner subsequently restored GOOGLE_CREDENTIALS and added OPENAI_API_KEY directly in GitHub Secrets. Cloud run 34330034471 verified Google authentication, GA reads and Sheets writes. Cloud run 34330284948 verified a real OpenAI response using fixed synthetic text, without analytics data. Automatic approval review blocked the proposed business-data deep-analysis test; that test did not run. CLARITY_API_TOKEN is present but its validity is not yet verified. Website logs remain not configured. Software-download event mapping remains pending; tool completion and signup are outside the user's current KPI scope.
+Approved migration: 2026-09-09. Source data and Google Sheets calculations use Python. Only analysis uses the existing OpenAI API. No key values appear in this repository.
 
 ## Outputs
 
-- [使用指南 Guide](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit#gid=1475505441): Chinese explanation and navigation for the 30 current data tabs and seven report tabs, including update timing, editable inputs, metric definitions and current implementation limits. This is a static guide and needs updating when the workbook changes.
+- [IBT - Website Data](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit)
+- [使用指南 Guide](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit#gid=1208128487): automatically refreshed descriptions, definitions, scopes, schedules and current tab links.
+- [Daily / Weekly / Monthly Reports](https://docs.google.com/spreadsheets/d/15jBCSt2FqujGjm-L8-PFZTpkMCSDtJVKDl1rEANNNKU/edit)
+- [Screaming Frog raw uploads](https://drive.google.com/drive/folders/1QKOgh4aFtVM1CQqaqdwlVSklq8s4LiND): YYYYMMDD subfolders with internal_all.csv, inlinks.csv, hreflang_all.csv. Running the desktop crawl remains manual.
 
-- [IBT - Website Data](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit): source data, configurations, ingestion state, revisions, technical snapshots, period statistics, and manual results. `Properties` is read-only to the monitor.
-- [iBoomto — Daily Report](https://docs.google.com/spreadsheets/d/15jBCSt2FqujGjm-L8-PFZTpkMCSDtJVKDl1rEANNNKU/edit): latest report, immutable issued reports, issues, source status, deep analysis and API usage.
-- [Screaming Frog upload folder](https://drive.google.com/drive/folders/1QKOgh4aFtVM1CQqaqdwlVSklq8s4LiND): dated YYYYMMDD folders containing internal_all.csv, inlinks.csv, hreflang_all.csv.
+## GA reconciliation — production hostname retained
 
-## Approved schedule (Asia/Tokyo)
+Every GA collector uses `hostName` **EXACT** `www.iboomto.com`. It does not include all subdomains and does not use CONTAINS. Everything else is excluded: test subdomains, management/backend subdomains, localhost, LAN hostnames/IPs, the bare domain `iboomto.com`, and missing/not-set hostname values. This rule also excludes newly introduced test hosts automatically.
 
-| Task | Trigger | Data period |
+To reproduce a result in GA, choose the same language property, use the same source-calendar dates, add Host name exactly equal to www.iboomto.com, and select the same metric. Channels use **Session default channel group**, not First user default channel group. Language denotes the independent property; path language is exposed separately on page records. Data dates follow the GA property timezone (currently America/Los_Angeles), not the JST job date.
+
+
+## Schedule (Asia/Tokyo)
+
+| Job | Trigger | Source interval |
 |---|---|---|
-| Daily GA/GSC, technical checks and report | Every day 17:00 | Previous seven closed dates in the source timezone; GA provisional and GSC final/provisional separately labelled |
+| Daily collection and report | 17:00 daily | Latest seven closed source-calendar days, clamped to launch |
 | GA weekly preview | Sunday 20:00 | Previous Sunday–Saturday |
-| GA weekly revision and GSC weekly pull | Tuesday daily run at 17:00 | Same full Sunday–Saturday interval; pending periods retry on following daily runs |
-| GA/GSC calendar month | Fourth of each month 16:00 | Previous calendar month; independent source status and pending retries |
+| GA revision + GSC weekly report | Tuesday 17:00, then pending retries | Same weekly period, sources independently marked |
+| Calendar month report | Fourth day 16:00 | Previous natural month, with pending daily retries |
 
-GitHub scheduling is best effort and may queue. Reports follow collectors, not a separate racing timer. 17:15–17:30 is a target to verify against actual runs, not a guaranteed completion time. Index checks use four workers with bounded request timeouts and rotate 30 URLs per day by default (configurable ceiling 100), starting with homepages and new URLs. GA date boundaries come from GA Data API metadata; GSC uses America/Los_Angeles. No source is assumed to use the runner's JST day.
+GitHub scheduling may queue. Reports run after collection. GA maturity means 48 hours after period close, not a provider guarantee. GSC uses final publication metadata, accepting both firstIncompleteDate and first_incomplete_date; all-state preview rows are visibly provisional. First launch week/month are partial. Weekly/monthly users come from whole-period API queries, never daily sums.
 
-GA mature means 48 hours after the source calendar day closed; this is an operational rule, not a platform guarantee. GSC `final` publication evidence controls comparisons. Missing data is never imputed as zero. The first launch week/month is labelled partial and not compared normally. Launch date: 2026-09-07.
+## Tables and selection
 
-## Credentials
+GA4 Site / GSC Site replace the former Daily tab titles, preserving their sheet IDs. Same-type rows share a sheet with period, start, end. GA channels, landing pages, events and GSC pages/queries expose plain dimensions; page fields include subfolder, page_type, page_name, page_url. Unknown manual metadata remains empty. CTR and conversion rates are numeric percentages; change_pp is percentage points. key_events_per_user is not CTR.
 
-Existing `GOOGLE_CREDENTIALS` is reused. It must identify gsc-api-service@gsc-api-project-453403.iam.gserviceaccount.com. GA/GSC read permission and write access to the two workbooks are needed. Drive API must be enabled for the project, with read access to the SF folder. Admin API is not required.
+Page name - manual management is the only page registry. Properties, the page registry and Site Event Logs - Manual are read-only to the program. Supported path prefixes: ar, ja, zh-tw, es, de, fr, it, pt; unprefixed paths of any depth are English. JP/TW labels map to ja/zh-tw. Incorrect double slashes are flagged, not silently rewritten.
 
-`OPENAI_API_KEY` powers GPT-5.6 Sol (`medium` daily, `high` deep). No silent fallback model. `CLARITY_API_TOKEN` is optional until supplied. Store credentials only in Actions Secrets; do not commit keys or raw private exports. Old `SHEET_ID` is deliberately unused by iBoomto, so Vidmud's historical target is not changed.
+Per-language daily page pool: GA organic active users Top30, GSC clicks Top30, plus every valid manual URL. Weekly/monthly pools include the previous period Top30. Exact page queries prevent substring collisions. Missing selected-page responses have blank metrics and no_data_returned. GSC query selection is Top100 clicks per language/day or whole period; never represented as exhaustive.
 
-Owner setup: open https://github.com/SaraZhang919/data-automation-vm/settings/secrets/actions and manage repository secrets directly in GitHub, never in a chat, source file, issue, or ordinary variable. `GOOGLE_CREDENTIALS` is the complete service-account JSON, not an OpenAI key or a file path. After replacing an OpenAI key, manually run `Verify OpenAI Connection` on main. This makes one synthetic-only API invocation and records model/token usage in the Actions summary without replacing an issued daily report or sending business data. The small response-length limit belongs only to this fixed connection test, not production report budgets.
+Event Mapping contains only software_download. Semantic confirmation is distinct from actual tracking verification. Each property must emit/create that event; marking a name as a key event alone does not convert dl_* events or backfill history. Counts describe download clicks, not completed downloads or installs. GA4 Business Events calculates full-period deduplicated trigger users and user conversion rate. No rows means waiting_for_event_data, not proven zero.
 
-The monitor runs only on main and scheduled/manual triggers. Official checkout/setup actions are pinned to verified commit SHAs; checkout does not persist its GitHub credential. The GitHub token has read-only contents permission, and API secrets are exposed only to the collection/report step. The OpenAI credential is sent only to the fixed HTTPS OpenAI endpoint; API errors record the HTTP status rather than response bodies. These measures do not prevent trusted repository writers from modifying future workflows: repository write/admin access must remain limited to trusted people.
+## Reports and comparisons
 
-The monitor scopes Google API access to analytics.readonly, webmasters.readonly, spreadsheets, drive.readonly. It does not require project Owner or cloud-platform for routine operation. One-time API enablement is separate from scheduled code.
+Overview, Weekly Overview and Monthly Overview update independently. Report History preserves issued versions; changed evidence generates a revision. Cached AI text never prevents current facts from refreshing. The report includes period-matched business-event metrics, channels/pages/query summaries, comparisons and technical issues. P1 is critical-page/core-collection failure; P2 is a local SEO issue or adequately supported mature-metric anomaly; P3 is observation/opportunity. LLM explains evidence and priority, not invented causality.
 
-## Manual use
+Comparisons exists immediately, with unavailable reasons until a compatible baseline exists. Day-over-day and same-weekday gates are independent. Missing data is not zero; zero baselines are new_activity. First full week is September 13–19; two full weeks finish September 26. September is a partial launch month.
 
-- Custom date query: select mode `manual`, source, start/end (inclusive), language and optionally exact URL/path prefix. The matching equal-length baseline is queried too. Results go to `Manual Results`; daily tables are not overwritten. The legacy Manual Check and Manual Page Detail workflow entrypoints now invoke this iBoomto collector.
-- Deep analysis: select mode `deep`, enter a question or issue ID, with optional dates/language/URL/prefix. It reads stored evidence, explicitly states unavailable dates, and stores its answer in `Deep Analysis`.
-- Backfill more than seven days: mode `daily`, source `ga` or `gsc`, specify start/end. It updates source rows. Issued daily reports remain unchanged unless `force` is explicitly selected.
-- Regenerate a report: `force=true` is an explicit additional API invocation. There is no arbitrary LLM spending quota; usage is recorded.
+## Storage and credentials
 
-## Human-maintained inputs
+Hidden columns/tabs remain readable and writable. Do not rename dependencies or headers. Writes update only changed rows and preserve hidden-column preferences through header migration. Use filter views and keep manual notes outside generated rows.
 
-- `Event Mapping`: one business action and language per row; comma-separated exact event names and `confirmed=true` after verifying the tracking trigger. Multiple events for one action are queried together to deduplicate converters. `Event Candidates` is discovery only. Do not confuse converted-file downloads with Windows software download or installation success.
-- `Priority Pages`: add URLs and enabled flags. Language homepages are included by default.
-- `Page Map`: optional page types and equivalent groups; translated slugs need not match. `zh-tw` corresponds to hreflang `zh-Hant`; x-default is not a tenth locale.
-- `Thresholds`: versioned count and ratio rules. Low-volume or provisional data cannot trigger ordinary drop alerts. Review actual historical revisions after 2–4 weeks before changing the seven-day backfill.
-- SF: upload Tuesday/Friday in the first month, weekly Tuesday afterwards and after major releases. Import is automatic; running the desktop crawl is still manual. Files have to be complete and unchanged during import.
+Main-sheet retention: daily detail 90 days, site daily 365 days, weekly 104 weeks, monthly 36 months. Archive Config points to a pre-provisioned human-owned private gzip file. The archive is written and downloaded for checksum verification before old source rows are removed. Missing or failed archives never delete data. Storage Status records outcomes. Raw SF files stay in Drive; Sheets keep compact current summaries and problem evidence. Sitemap current state is refreshed; history logs differences only, and partial fetch failures cannot create removal events.
 
-## Failure and retention behavior
+GOOGLE_CREDENTIALS remains the existing service-account JSON in GitHub Actions Secrets; OPENAI_API_KEY remains the existing OpenAI secret. Routine scopes are analytics.readonly, webmasters.readonly, spreadsheets, drive.readonly. Only the archive path requests the Drive scope needed to update the specified existing private file; its service-account ACLs still govern access. No project Owner or cloud-platform role is required. CLARITY_API_TOKEN is optional; website access logs remain a later integration and installer logs are excluded.
 
-Sources fail independently, with safe error types in `Run Status`. Partial/stale/unconfigured states are distinct from zero and success. AI failure leaves a factual report. An already issued successful report is not silently overwritten by a backfill. Failed AI reports may be retried.
+Model: gpt-5.6-sol, medium for daily/weekly/monthly, high for deep. Requested and actual response model, usage, prompt version and rule version are recorded. No silent model fallback. All API calls use fixed provider HTTPS endpoints and errors do not echo secrets. Actions run only on main, official actions are SHA-pinned, and checkout does not persist credentials.
 
-Data revisions are retained. Latest links/hreflang have dedicated current views, while page snapshots and raw Drive batches provide history. Raw SF files are currently retained without automatic deletion; a 90-day cleanup policy must preserve at least three successful batches and all failed/unprocessed batches before deletion is enabled.
+## Manual operations
 
-Website access logs are a later integration once the tech team supplies an archive location/format; installer logs are explicitly excluded. Until then `Website logs` is marked not configured. Clarity collects overall/URL/device rolling 24h views, does not add overlapping windows, and observes the provider's 10 requests/day and non-paginated 1,000-row ceiling.
+Actions → iBoomto Monitor: manual mode requires start/end, source, language, optional exact URL/prefix; results go to Manual Results. Deep mode accepts a question and stored-data selection. Daily mode with dates backfills source partitions and creates a report revision if evidence changes. force=true explicitly requests another AI generation. Weekly and monthly data are queried over their entire intervals.
 
-## Validation
+## Verification and rollback
 
-`python -m unittest discover -s tests -v` covers language boundaries, launch/calendar cutoffs, source timezones, whole-period users, idempotent writes, API failure preservation, malformed CSV, partial sitemap, issue resolution, provisional alert gating, RAW Sheets writes and AI fallback/immutable reports.
+Run `python -m unittest discover -s tests -v`. Tests cover source timezone boundaries, exact host scope, mandatory manual pages, missing vs zero, GSC camelCase publication metadata, full-period users, report isolation/revisions, and fail-closed retention.
 
-`python -m iboomto.preflight --env-file ../.env.local` checks live read access and model availability. For an isolated collector run without remote writes: `python -m iboomto.run --env-file ../.env.local --no-ai`. Only `--write` enables Sheets changes. Private diagnostics are written under ignored runtime/.
+One-time migration uses iboomto.backup and iboomto.migrate_v2. Verified full-grid backups include formulas, formats, metadata and values for both workbooks; they live under ignored outputs, never in the public repository. Retired tabs are removed only after a successful compact import and data verification. Use iboomto.setup_archive to verify a human-owned private archive before retention starts.

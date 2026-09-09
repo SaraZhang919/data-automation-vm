@@ -29,12 +29,13 @@ def request(session, method, url, **kwargs):
         time.sleep(min(60, max(30 if r.status_code==429 else 2**attempt, int(r.headers.get('Retry-After','0')) if r.headers.get('Retry-After','0').isdigit() else 0)))
     raise ApiFailure("Request failed")
 
-def google_session():
+def google_session(archive=False):
     import os
     from google.oauth2.service_account import Credentials
     from google.auth.transport.requests import AuthorizedSession
     scopes = ["https://www.googleapis.com/auth/analytics.readonly", "https://www.googleapis.com/auth/webmasters.readonly",
               "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly"]
+    if archive:scopes[-1]='https://www.googleapis.com/auth/drive'
     raw = os.environ.get("GOOGLE_CREDENTIALS")
     if raw:
         creds = Credentials.from_service_account_info(json.loads(raw), scopes=scopes)
@@ -53,12 +54,16 @@ def col(n):
     return out
 
 class Sheets:
+    def link(self,name):
+        sid=self.tabs.get(name,{}).get('sheetId')
+        return 'https://docs.google.com/spreadsheets/d/'+getattr(self,'id','')+'/edit'+('#gid='+str(sid) if sid is not None else '')
+
     def __init__(self, session, sheet_id, write=False):
         self.s = session; self.id = sheet_id; self.write = write
         self.base = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
         self.meta = request(session,"GET",self.base,params={"fields":"sheets.properties"}).json()
         self.tabs = {x['properties']['title']:x['properties'] for x in self.meta.get('sheets',[])}
-        self.cache = {}; self.headers = {}; self.dirty = set(); self.old_sizes = {}
+        self.cache = {}; self.headers = {}; self.dirty = set(); self.old_sizes = {}; self.original = {}
 
     def read(self, name):
         if name in self.cache: return self.cache[name]
@@ -77,10 +82,11 @@ class Sheets:
         self.headers[name]=head
         self.cache[name]=[dict(zip(head,row)) for row in values[1:] if any(v != "" for v in row)]
         self.old_sizes[name]=len(values)
+        self.original[name]=values
         return self.cache[name]
 
     def set(self, name, rows, headers=None):
-        if name == 'Properties': raise ValueError("Properties is read only")
+        if name in ('Properties','Page name - manual management','Site Event Logs - Manual'): raise ValueError("User configuration is read only")
         self.read(name)
         head=list(headers or self.headers[name])
         for row in rows:
@@ -122,12 +128,29 @@ class Sheets:
             return '' if v is None else v
         for name in names:
             rows=self.cache[name];head=self.headers[name]
-            matrix=[head]+[[cell(row.get(k,"")) for k in head] for row in rows]
+            from .layout import ordered_headers
+            head=ordered_headers(name,head);self.headers[name]=head
+            prior=getattr(self,'original',{}).get(name,[])
+            width=max(len(head),len(prior[0]) if prior else 0)
+            matrix=[head+['']*(width-len(head))]+[[cell(row.get(k,"")) for k in head]+['']*(width-len(head)) for row in rows]
             if self.old_sizes.get(name,0)>len(matrix):
-                matrix += [[""]*len(head) for _ in range(self.old_sizes[name]-len(matrix))]
-            for start in range(0,len(matrix),500):
-                writes.append({'range':f"'{name}'!A{start+1}",'values':matrix[start:start+500]})
+                matrix += [[""]*width for _ in range(self.old_sizes[name]-len(matrix))]
+            def normalized(row):return row+['']*(width-len(row))
+            # Write only changed contiguous rows, preserving unaffected cells and formatting.
+            start=0
+            while start<len(matrix):
+                if start<len(prior) and normalized(prior[start])==matrix[start]:start+=1;continue
+                end=start+1
+                while end<len(matrix) and end-start<500 and (end>=len(prior) or normalized(prior[end])!=matrix[end]):end+=1
+                writes.append({'range':f"'{name}'!A{start+1}",'values':matrix[start:end]});start=end
             sid=self.tabs[name]['sheetId']
+            if prior and prior[0]!=head:
+                # Move the user's hidden-column preference with the field when reordering headers.
+                column_meta=request(self.s,'GET',self.base,params={'ranges':f"'{name}'!A1:{col(width)}1",'includeGridData':'true','fields':'sheets(data(columnMetadata(hiddenByUser)))'}).json()
+                old_columns=column_meta.get('sheets',[{}])[0].get('data',[{}])[0].get('columnMetadata',[])
+                hidden={key:old_columns[i].get('hiddenByUser',False) if i<len(old_columns) else False for i,key in enumerate(prior[0])}
+                for i,key in enumerate(head):
+                    formats.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':i,'endIndex':i+1},'properties':{'hiddenByUser':hidden.get(key,False)},'fields':'hiddenByUser'}})
             formats.extend([
                 {"repeatCell":{"range":{"sheetId":sid,"startRowIndex":0,"endRowIndex":1},"cell":{"userEnteredFormat":{"backgroundColor":{"red":.10,"green":.20,"blue":.30},"textFormat":{"bold":True,"foregroundColor":{"red":1,"green":1,"blue":1}},"wrapStrategy":"WRAP"}},"fields":"userEnteredFormat"}},
                 {"updateSheetProperties":{"properties":{"sheetId":sid,"gridProperties":{"frozenRowCount":1}},"fields":"gridProperties.frozenRowCount"}}
@@ -135,13 +158,14 @@ class Sheets:
             if name=='AI Cache':
                 formats.append({'updateSheetProperties':{'properties':{'sheetId':sid,'hidden':True},'fields':'hidden'}})
             # Keep working tables readable; bounded row formatting never touches Properties.
-            formatting=[{'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':len(rows)+1,'endColumnIndex':len(head)},
-                                      'cell':{'userEnteredFormat':{'wrapStrategy':'CLIP','textFormat':{'fontFamily':'Arial','fontSize':10},'verticalAlignment':'TOP'}},'fields':'userEnteredFormat'}}] if rows else []
-            if name=='Overview':
+            formatting=[]
+            from .layout import format_columns
+            formatting.extend(format_columns(sid,name,head,len(rows),not prior or prior[0]!=head))
+            if name in ('Overview','Weekly Overview','Monthly Overview'):
                 formatting += [{'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':2,'endIndex':3},'properties':{'pixelSize':760},'fields':'pixelSize'}},
                                {'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':len(rows)+1,'startColumnIndex':2,'endColumnIndex':3},'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}},
                                {'autoResizeDimensions':{'dimensions':{'sheetId':sid,'dimension':'ROWS','startIndex':1,'endIndex':len(rows)+1}}}]
-            if name in ('Issues','Daily History','Deep Analysis','AI Usage','Data Status'):
+            if name in ('Issues','Report History','Deep Analysis','AI Usage','Data Status') and not prior:
                 for index,key in enumerate(head):
                     width=600 if key in ('summary','findings','actions','limitations','evidence') else 480 if key=='url' else 230 if key.endswith('_at') or key in ('at','first_seen','last_seen','source') else 165
                     formatting.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':index,'endIndex':index+1},'properties':{'pixelSize':width},'fields':'pixelSize'}})
@@ -160,4 +184,6 @@ class Sheets:
         for name in names:
             rows=self.cache[name]
             self.old_sizes[name]=len(rows)+1
+            if not hasattr(self,'original'):self.original={}
+            self.original[name]=[self.headers[name]]+[[cell(r.get(k,'')) for k in self.headers[name]] for r in rows]
         self.dirty.clear()

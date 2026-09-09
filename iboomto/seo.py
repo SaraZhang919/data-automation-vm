@@ -28,7 +28,7 @@ def seo_findings(store):
         latest=max(batches,key=lambda r:(r['batch_date'],r.get('checked_at','')))
         pages={r['url']:r for r in store.read('SF Pages') if r.get('batch')==latest['id']}
         sitemap={r['url']:r for r in store.read('Sitemap URLs')}
-        linked={r.get('To') for r in store.read('SF Links Latest') if r.get('From') in pages}
+        linked={u for u,r in pages.items() if float(r.get('internal_inlinks') or 0)>0}
         for url,r in sitemap.items():
             found=url in pages
             note='crawled' if found else 'not_in_latest_crawl'
@@ -43,12 +43,3 @@ def seo_findings(store):
 def urlsplit_path(url):
     from urllib.parse import urlsplit
     return urlsplit(url).path
-
-def event_candidates(store):
-    candidates={}
-    for r in store.read('GA4 Events'):
-        name=as_dict(r['dimensions']).get('eventName','')
-        if not any(x in name.lower() for x in ('succ','download','regis','signup','sign_up','install')):continue
-        key=digest([r['language'],name])
-        candidates[key]={'id':key,'language':r['language'],'event_name':name,'observed_at':r['collected_at'],'status':'needs_semantic_verification','note':'Event name alone does not establish business success'}
-    store.upsert('Event Candidates',list(candidates.values()))

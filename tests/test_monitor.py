@@ -52,18 +52,19 @@ class CoreTests(unittest.TestCase):
 
     def test_whole_period_users_not_daily_sum(self):
         s=MemoryStore();api=Mock();api.ga_timezone.return_value='America/Los_Angeles'
-        def ga(pid,start,end,dims,metrics,filters):
+        def ga(pid,start,end,dims,metrics,filters,**kwargs):
+            if kwargs:return [],{}
             self.assertEqual(start,date(2026,9,13));self.assertEqual(end,date(2026,9,19));self.assertNotIn('date',dims)
             row={k:5 for k in metrics};row.update({k:'sample' for k in dims});row['totalUsers']=5
             return [row],{}
         api.ga.side_effect=ga
         collect_ga(api,s,{'id':'123','language':'en'},date(2026,9,13),date(2026,9,19),datetime(2026,9,25,tzinfo=timezone.utc),'weekly')
-        self.assertEqual(s.read('GA4 Weekly Daily')[0]['totalUsers'],5)
+        self.assertEqual(s.read('GA4 Site')[0]['totalUsers'],5)
 
     def test_failed_query_keeps_previous_data(self):
-        s=MemoryStore();s.set('GA4 Daily',[{'id':'old','sessions':100}]);api=Mock();api.ga_timezone.return_value='UTC';api.ga.side_effect=RuntimeError('down')
+        s=MemoryStore();s.set('GA4 Site',[{'id':'old','sessions':100}]);api=Mock();api.ga_timezone.return_value='UTC';api.ga.side_effect=RuntimeError('down')
         with self.assertRaises(RuntimeError):collect_ga(api,s,{'id':'123','language':'en'},date(2026,9,7),date(2026,9,8),datetime(2026,9,10,tzinfo=timezone.utc))
-        self.assertEqual(s.read('GA4 Daily')[0]['sessions'],100)
+        self.assertEqual(s.read('GA4 Site')[0]['sessions'],100)
 
     def test_csv_headers_and_malformed_rows(self):
         self.assertEqual(parse_csv(b'From,To\na,b\n',['From','To'])[0]['From'],'a')

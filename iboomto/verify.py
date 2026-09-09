@@ -8,12 +8,12 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--env-file');p.add_argument('--annotate-revisions',action='store_true');args=p.parse_args()
     if args.env_file:load_local_env(args.env_file)
     s=google_session();data=Sheets(s,DATA_ID,args.annotate_revisions)
-    tables=['GA4 Daily','GA4 Channels','GA4 Landing Pages','GA4 Events','GSC Daily','GSC Pages','GSC Queries','SF Pages','SF Links Latest','SF Hreflang Latest','Sitemap URLs','Technical Checks','URL Inspection','Manual Results']
+    tables=['GA4 Site','GA4 Channels','GA4 Landing Pages','GA4 Events','GSC Site','GSC Pages','GSC Queries','SF Pages','SF Links Latest','SF Hreflang Latest','Sitemap URLs','Technical Checks','URL Inspection','Manual Results']
     result={}
     for name in tables:
         rows=data.read(name);ids=[r.get('id') for r in rows]
         result[name]={'rows':len(rows),'unique_ids':len(set(ids)),'duplicate_ids':len(ids)-len(set(ids))}
-        if name=='GA4 Daily':result[name]['languages']=sorted({r['language'] for r in rows})
+        if name=='GA4 Site':result[name]['languages']=sorted({r['language'] for r in rows})
         if name=='URL Inspection':result[name]['statuses']={v:sum(r.get('status')==v for r in rows) for v in {r.get('status') for r in rows}}
     if args.annotate_revisions:
         revisions=data.read('Data Revisions');annotated=[];format_only=0
@@ -30,7 +30,7 @@ def main():
     rid=os.environ.get('IBOOMTO_REPORT_SHEET_ID')
     if rid:
         report=Sheets(s,rid)
-        result['reports']=[{k:r.get(k) for k in ('report_date','kind','ai_status','summary')} for r in report.read('Daily History')]
+        result['reports']=[{k:r.get(k) for k in ('report_date','kind','ai_status','summary')} for r in report.read('Report History')]
         result['usage']=report.read('AI Usage')
     print(json.dumps(result,ensure_ascii=False,indent=2))
 

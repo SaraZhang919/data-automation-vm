@@ -11,6 +11,7 @@ import requests
 from bs4 import BeautifulSoup
 from .core import SITE,SF_FOLDER,LANGS,digest,issue,language,stamp
 from .storage import request,ApiFailure
+from .pages import priority_urls
 
 class PublicSite:
     def __init__(self):
@@ -58,12 +59,22 @@ def sitemap_collect(store,web):
     for r in urls:r['first_seen']=old.get(r['id'],{}).get('first_seen',r['observed_at'])
     if complete:store.set('Sitemap URLs',urls)
     else:store.upsert('Sitemap URLs',urls)
-    store.upsert('Sitemap Sources',sources)
-    store.upsert('Sitemap History',[{'id':digest([stamp(),r['id']]),**{k:v for k,v in r.items() if k!='id'}} for r in urls])
+    previous_sources={r['id']:r for r in store.read('Sitemap Sources')}
+    for src in sources:src['last_success_at']=src['checked_at'] if src['status']=='success' else previous_sources.get(src['id'],{}).get('last_success_at','')
+    if complete:store.set('Sitemap Sources',sources)
+    else:store.upsert('Sitemap Sources',sources)
+    changes=[];current={r['id']:r for r in urls}
+    for key,r in current.items():
+        kind='added' if key not in old else 'lastmod_changed' if r.get('lastmod')!=old[key].get('lastmod') else ''
+        if kind:changes.append({'id':digest([stamp(),key,kind]),'change':kind,'url':r['url'],'sitemap':r['sitemap'],'lastmod':r.get('lastmod',''),'previous_lastmod':old.get(key,{}).get('lastmod',''),'observed_at':stamp()})
+    if complete:
+        for key,r in old.items():
+            if key not in current:changes.append({'id':digest([stamp(),key,'removed']),'change':'removed','url':r['url'],'sitemap':r.get('sitemap',''),'observed_at':stamp()})
+    store.upsert('Sitemap History',changes)
     return urls,complete
 
 def check_pages(store,web,urls,now):
-    priority={r['url'] for r in store.read('Priority Pages') if r.get('enabled',True) not in (False,'false','FALSE') and r.get('url')}
+    priority=priority_urls(store)
     priority|={SITE+'/' if lg=='en' else SITE+'/'+lg for lg in LANGS}
     candidates={r['url'] for r in urls if language(r['url']) is not None}|priority
     candidates|={r['url'] for r in store.read('SF Pages') if str(r.get('status','')).startswith(('4','5')) and language(r['url']) is not None}
@@ -132,7 +143,7 @@ def parse_csv(raw,required):
 
 def sf_import(session,store,now):
     folders=[f for f in drive_list(session,SF_FOLDER) if f['mimeType']=='application/vnd.google-apps.folder']
-    done={r['id'] for r in store.read('Import Batches') if r.get('status')=='success'}
+    done={r['id'] for r in store.read('Import Batches') if r.get('status')=='success' and r.get('schema_version')=='compact-v2'}
     latest_time=max((r.get('batch_date','') for r in store.read('Import Batches') if r.get('status')=='success'),default='')
     issues=[]; imported=0
     for folder in sorted(folders,key=lambda f:f['name']):
@@ -141,7 +152,7 @@ def sf_import(session,store,now):
         names=['internal_all.csv','inlinks.csv','hreflang_all.csv']
         bid=digest([folder['id'],[(n,files.get(n,{}).get('md5Checksum'),files.get(n,{}).get('modifiedTime')) for n in names]])
         if bid in done:continue
-        rec={'id':bid,'folder':folder['id'],'batch_date':folder['name'],'checked_at':stamp()}
+        rec={'id':bid,'folder':folder['id'],'source_link':'https://drive.google.com/drive/folders/'+folder['id'],'batch_date':folder['name'],'checked_at':stamp(),'schema_version':'compact-v2'}
         if any(n not in files for n in names):
             store.upsert('Import Batches',[{**rec,'status':'incomplete','detail':'Requires internal_all.csv, inlinks.csv, hreflang_all.csv'}]);continue
         if any((now-datetime.fromisoformat(files[n]['modifiedTime'].replace('Z','+00:00'))).total_seconds()<60 for n in names):continue
@@ -159,14 +170,22 @@ def sf_import(session,store,now):
             for p in html:
                 url=p['Address']
                 p={k:v for k,v in p.items() if k not in ('Cookies',)}
-                packed.append({'id':digest([bid,url]),'batch':bid,'batch_date':folder['name'],'url':url,'language':language(url),'crawl_timestamp':p.get('Crawl Timestamp',''),'crawl_timezone':'unspecified','status':p['Status Code'],'data':p})
+                ins=sorted({x['From'] for x in links if x['To']==url and x['From'] in page_set})
+                packed.append({'id':url,'batch':bid,'batch_date':folder['name'],'url':url,'language':language(url),'crawl_timestamp':p.get('Crawl Timestamp',''),'crawl_timezone':'unspecified',
+                    'status':p['Status Code'],'indexability':p.get('Indexability',''),'indexability_status':p.get('Indexability Status',''),
+                    'canonical':p.get('Canonical Link Element 1',''),'title':p.get('Title 1',''),'internal_inlinks':len(ins),'inlink_examples':ins[:5],
+                    'source_link':rec['source_link']})
                 if str(p['Status Code']).startswith(('4','5')):
                     ins=[x['From'] for x in links if x['To']==url]
                     issues.append(issue('sf_http_error',url,'yellow',{'status':p['Status Code'],'inlinks':ins,'batch':bid},observed,'SF Pages'))
-            store.upsert('SF Pages',packed)
             if folder['name']>=latest_time:
-                store.set('SF Links Latest',[{'id':digest([bid,i]),'batch':bid,'batch_date':folder['name'],**r} for i,r in enumerate(links)])
-                store.set('SF Hreflang Latest',[{'id':digest([bid,r['Address']]),'batch':bid,'batch_date':folder['name'],**r} for r in hrefs])
+                store.set('SF Pages',packed,headers=list(packed[0]) if packed else ['id','url','batch','status','internal_inlinks','source_link'])
+                # Raw hreflang remains in Drive; keep only explicit issue flags exported by SF.
+                findings=[]
+                for r in hrefs:
+                    flagged={k:v for k,v in r.items() if v and any(x in k.lower() for x in ('missing','non-200','incorrect','multiple','outside','invalid','unlinked')) and str(v).lower() not in ('0','false','no')}
+                    if flagged:findings.append({'id':digest([bid,r['Address']]),'url':r['Address'],'batch':bid,'evidence':flagged,'source_link':rec['source_link']})
+                store.set('SF Hreflang Issues',findings,headers=['id','url','batch','evidence','source_link'])
                 latest_time=folder['name']
             store.upsert('Import Batches',[{**rec,'status':'success','page_rows':len(pages),'html_rows':len(html),'link_rows':len(links),'hreflang_rows':len(hrefs),'crawl_timestamp':observed,'raw_hashes':{n:digest(raw[n].hex()) for n in names}}])
             imported+=1

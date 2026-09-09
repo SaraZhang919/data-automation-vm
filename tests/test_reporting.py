@@ -8,11 +8,11 @@ from iboomto.storage import Sheets
 class ReportingTests(unittest.TestCase):
     def test_ai_failure_still_produces_facts(self):
         data=MemoryStore();report=MemoryStore();initialise_config(data)
-        data.set('GA4 Daily',[{'id':'a','language':'en','end':'2026-09-08','quality':'provisional','sessions':50}])
+        data.set('GA4 Site',[{'id':'a','language':'en','start':'2026-09-08','end':'2026-09-08','quality':'provisional','sessions':50}])
         with patch('iboomto.reporting.ai_analyse',side_effect=RuntimeError('API unavailable')):
             result=generate_report(data,report,[],[],'run',date(2026,9,9))
         self.assertEqual(result['status'],'failed')
-        self.assertTrue(any(r['section']=='GA4 Daily' for r in report.read('Overview')))
+        self.assertTrue(any(r['section']=='GA4 Site' for r in report.read('Overview')))
 
     def test_issued_report_does_not_call_llm_on_backfill(self):
         data=MemoryStore();report=MemoryStore();initialise_config(data)
@@ -21,11 +21,11 @@ class ReportingTests(unittest.TestCase):
             generate_report(data,report,[],[],'first',date(2026,9,9))
             generate_report(data,report,[],[],'second',date(2026,9,9))
             self.assertEqual(ai.call_count,1)
-        self.assertEqual(len(report.read('Daily History')),1)
+        self.assertEqual(len(report.read('Report History')),1)
 
     def test_provisional_drop_is_not_an_alert(self):
         data=MemoryStore();initialise_config(data)
-        data.set('GA4 Daily',[{'id':str(i),'end':f'2026-09-{i:02}','language':'en','quality':'provisional','sessions':0,'activeUsers':0} for i in range(7,16)])
+        data.set('GA4 Site',[{'id':str(i),'end':f'2026-09-{i:02}','language':'en','quality':'provisional','sessions':0,'activeUsers':0} for i in range(7,16)])
         self.assertEqual(metric_findings(data),[])
 
     def test_sheets_flush_batches_multiple_tabs_and_raw_values(self):
