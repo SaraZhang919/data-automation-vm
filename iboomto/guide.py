@@ -1,5 +1,7 @@
 """The in-workbook guide follows actual tab IDs, including renamed tabs."""
 import os
+import math
+import unicodedata
 
 DESCRIPTIONS={
  'GA4 Data Quality':('数据质量','对照渠道行合计与同范围站点API总量；不一致显示non_additive_review，保留源值，不强行缩放。'),
@@ -125,5 +127,11 @@ def guide_format_requests(sid,rows,links,width=6):
                 'cell':{'userEnteredFormat':{'textFormat':{'link':{'uri':url},'underline':True,'foregroundColor':{'red':.07,'green':.33,'blue':.72}}}},
                 'fields':'userEnteredFormat.textFormat.link,userEnteredFormat.textFormat.underline,userEnteredFormat.textFormat.foregroundColor'}})
         previous=category
-    requests.append({'autoResizeDimensions':{'dimensions':{'sheetId':sid,'dimension':'ROWS','startIndex':0,'endIndex':end}}})
+    # Sheets auto-resize can leave wrapped rows at 21px; reserve explicit reading space.
+    requests.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'ROWS','startIndex':0,'endIndex':1},'properties':{'pixelSize':32},'fields':'pixelSize'}})
+    for index,row in enumerate(rows,1):
+        lines=max(math.ceil(sum(15 if unicodedata.east_asian_width(c) in 'WF' else 8 for c in row[key])/(size-20))
+                  for key,size in zip(('类别','表格或主题','说明'),(145,290,760)))
+        height=max(44,24*lines+12)
+        requests.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'ROWS','startIndex':index,'endIndex':index+1},'properties':{'pixelSize':height},'fields':'pixelSize'}})
     return requests
