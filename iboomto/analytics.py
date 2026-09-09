@@ -7,6 +7,15 @@ from .storage import request, ApiFailure
 
 GA_METRICS=['sessions','activeUsers','totalUsers','newUsers','engagedSessions','engagementRate','averageSessionDuration','keyEvents']
 
+def metric_changed(before,after,keys):
+    for k in keys:
+        a,b=before.get(k),after.get(k)
+        try:
+            if float(a)!=float(b):return True
+        except (TypeError,ValueError):
+            if a!=b:return True
+    return False
+
 class Analytics:
     def __init__(self, session): self.s=session; self.timezones={}
 
@@ -124,7 +133,7 @@ def collect_ga(api,store,prop,start,end,now,period='daily',exact='',prefix='',ma
         revisions=[]
         for r in packed:
             prior=old.get(r['id'])
-            if prior and any(str(prior.get(k,''))!=str(r.get(k,'')) for k in metrics):
+            if prior and metric_changed(prior,r,metrics):
                 revisions.append({'id':digest([r['id'],r['collected_at']]),'record_id':r['id'],'source':tab,'date':r['end'],'old_metrics':{k:prior.get(k) for k in metrics},'new_metrics':{k:r.get(k) for k in metrics},'revised_at':r['collected_at']})
         store.upsert('Data Revisions',revisions)
         store.upsert(tab,packed,replace_where=partition)
@@ -192,7 +201,7 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
             revisions=[]
             for r in packed:
                 before=old.get(r['id'])
-                if before and any(str(before.get(k,''))!=str(r.get(k,'')) for k in ('clicks','impressions','ctr','position')):
+                if before and metric_changed(before,r,('clicks','impressions','ctr','position')):
                     revisions.append({'id':digest([r['id'],r['collected_at']]),'record_id':r['id'],'source':tab,'date':r['end'],
                                       'old_metrics':{k:before.get(k) for k in ('clicks','impressions','ctr','position')},
                                       'new_metrics':{k:r.get(k) for k in ('clicks','impressions','ctr','position')},'revised_at':r['collected_at']})

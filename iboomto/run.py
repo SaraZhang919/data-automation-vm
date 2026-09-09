@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor,as_completed
 from datetime import date,datetime,timedelta,timezone
 from pathlib import Path
@@ -116,9 +117,11 @@ def main():
                     limit=min(100,max(9,int(os.environ.get('IBOOMTO_INSPECTION_DAILY_LIMIT','30'))))
                     urls=sorted({r['url'] for r in sitemap_urls},key=lambda u:(u not in priority,u in old,old.get(u,{}).get('checked_at',''),u))[:limit]
                     records=[];failed=0
+                    worker=threading.local()
                     def inspect_one(u):
                         try:
-                            result=Analytics(google_session()).inspection(u)
+                            if not hasattr(worker,'api'):worker.api=Analytics(google_session())
+                            result=worker.api.inspection(u)
                             return {'id':u,'url':u,'checked_at':stamp(),'status':'success','result':result}
                         except Exception as e:return {'id':u,'url':u,'checked_at':stamp(),'status':'failed','error_type':type(e).__name__}
                     with ThreadPoolExecutor(max_workers=4) as pool:

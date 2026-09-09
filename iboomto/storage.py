@@ -44,7 +44,7 @@ def google_session():
         creds = Credentials.from_service_account_file(path, scopes=scopes)
     expected = "gsc-api-service@gsc-api-project-453403.iam.gserviceaccount.com"
     if creds.service_account_email != expected: raise ApiFailure("Unexpected Google service account")
-    return AuthorizedSession(creds)
+    return AuthorizedSession(creds,refresh_timeout=20)
 
 def col(n):
     out = ""

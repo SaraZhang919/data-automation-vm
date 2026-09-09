@@ -3,7 +3,7 @@ from datetime import date,datetime,timezone
 from unittest.mock import Mock
 from iboomto.core import language,daily_window,previous_week,previous_month,mature,count_alert,parse_properties
 from iboomto.storage import Sheets
-from iboomto.analytics import collect_ga,collect_gsc
+from iboomto.analytics import collect_ga,collect_gsc,metric_changed
 from iboomto.technical import parse_csv,sitemap_collect
 from iboomto.reporting import reconcile_issues
 
@@ -44,6 +44,11 @@ class CoreTests(unittest.TestCase):
     def test_upsert_does_not_duplicate(self):
         s=MemoryStore();s.upsert('x',[{'id':'one','value':1}]);s.upsert('x',[{'id':'one','value':2}])
         self.assertEqual(s.read('x'),[{'id':'one','value':2}])
+
+    def test_numeric_representation_is_not_a_revision(self):
+        self.assertFalse(metric_changed({'sessions':3},{'sessions':3.0},['sessions']))
+        self.assertFalse(metric_changed({'sessions':'3'},{'sessions':3.0},['sessions']))
+        self.assertTrue(metric_changed({'sessions':3},{'sessions':4},['sessions']))
 
     def test_whole_period_users_not_daily_sum(self):
         s=MemoryStore();api=Mock();api.ga_timezone.return_value='America/Los_Angeles'
