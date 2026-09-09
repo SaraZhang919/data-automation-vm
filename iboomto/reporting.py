@@ -174,7 +174,7 @@ def ai_analyse(payload,report,kind='daily',question='',force=False):
     if r.status_code!=200:raise ApiFailure(f'OpenAI HTTP {r.status_code}')
     data=r.json();choice=data['choices'][0]
     report.upsert('AI Usage',[{'id':data.get('id',digest([stamp(),cache_id])),'at':stamp(),'kind':kind,'requested_model':MODEL,'response_model':data.get('model'),
-                            'reasoning_effort':effort,'prompt_version':PROMPT_VERSION,'rule_version':RULE_VERSION,'usage':data.get('usage',{}),'finish_reason':choice.get('finish_reason')}])
+                            'reasoning_effort':effort,'prompt_version':PROMPT_VERSION,'rule_version':RULE_VERSION,'rule_hash':digest(payload.get('rules',[])),'usage':data.get('usage',{}),'finish_reason':choice.get('finish_reason')}])
     if choice.get('finish_reason')!='stop':raise ApiFailure('AI response incomplete')
     result=json.loads(choice['message']['content'])
     if not isinstance(result.get('summary'),str) or any(not isinstance(result.get(k),list) for k in ('findings','actions','deep_analysis_candidates','limitations')):
