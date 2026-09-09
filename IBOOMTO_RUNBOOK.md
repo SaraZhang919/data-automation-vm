@@ -51,6 +51,8 @@ Main-sheet retention: daily detail 90 days, site daily 365 days, weekly 104 week
 
 GOOGLE_CREDENTIALS remains the existing service-account JSON in GitHub Actions Secrets; OPENAI_API_KEY remains the existing OpenAI secret. Routine scopes are analytics.readonly, webmasters.readonly, spreadsheets, drive.readonly. Only the archive path requests the Drive scope needed to update the specified existing private file; its service-account ACLs still govern access. No project Owner or cloud-platform role is required. CLARITY_API_TOKEN is optional; website access logs remain a later integration and installer logs are excluded.
 
+The expanded report evidence is currently gated by IBOOMTO_AI_REPORTS_ENABLED=true. Until explicitly authorized, collectors and factual report views run but no OpenAI report request is made. The existing synthetic connection test is separate.
+
 Model: gpt-5.6-sol, medium for daily/weekly/monthly, high for deep. Requested and actual response model, usage, prompt version and rule version are recorded. No silent model fallback. All API calls use fixed provider HTTPS endpoints and errors do not echo secrets. Actions run only on main, official actions are SHA-pinned, and checkout does not persist credentials.
 
 ## Manual operations

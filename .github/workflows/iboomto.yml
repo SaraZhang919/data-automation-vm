@@ -66,6 +66,7 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          IBOOMTO_AI_REPORTS_ENABLED: ${{ vars.IBOOMTO_AI_REPORTS_ENABLED }}
           CLARITY_API_TOKEN: ${{ secrets.CLARITY_API_TOKEN }}
           IBOOMTO_SHEET_ID: '1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs'
           IBOOMTO_REPORT_SHEET_ID: '15jBCSt2FqujGjm-L8-PFZTpkMCSDtJVKDl1rEANNNKU'

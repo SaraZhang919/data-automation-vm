@@ -40,7 +40,8 @@ def generate(store,report,statuses,issues,run_id,report_date,kind='daily',questi
     else:
         try:analysis=ai_analyse(payload,report,kind,question,force)
         except Exception as exc:
-            state='failed';analysis={'summary':'事实数据已更新；AI 分析未完成。','findings':[],'actions':[],'deep_analysis_candidates':[],'limitations':[str(exc)]}
+            state='pending_authorization' if 'AI transfer pending authorization' in str(exc) else 'failed'
+            analysis={'summary':'事实数据已更新；AI 分析未完成。','findings':[],'actions':[],'deep_analysis_candidates':[],'limitations':[str(exc)]}
         if force:rid=digest([rid,stamp(),run_id])
         version=1+sum(r.get('kind')==kind and r.get('report_date')==str(report_date) for r in history)
         record={'id':rid,'report_date':str(report_date),'kind':kind,'period':period,'statistical_ranges':dates,'version':version,
