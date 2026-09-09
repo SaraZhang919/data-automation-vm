@@ -70,14 +70,60 @@ def update_guide(store,report=None):
         ('软件下载设置','各GA属性需要实际发送software_download或通过创建事件规则生成；仅添加Key event名称不会转换dl_*；新建事件不回填过去。'),
         ('服务器日志','目前尚未接入网站CDN访问日志。此处不包含安装包日志分析；软件下载仅使用GA事件。'),
     ]
-    for topic,detail in topics:rows.append({'类别':'使用规则','表格或主题':topic,'说明':detail,'链接':''})
+    groups=[
+        ('报告与行动',['Overview','Weekly Overview','Monthly Overview','Issues','Comparisons','Report History','Deep Analysis']),
+        ('人工维护',['Properties','Page name - manual management','Site Event Logs - Manual','Event Mapping','Thresholds']),
+        ('流量与下载',['GA4 Site','GA4 Channels','GA4 Landing Pages','GA4 Business Events','GA4 Events','GSC Site','GSC Pages','GSC Queries','Clarity Snapshots','Manual Results']),
+        ('技术 SEO',['Technical Findings','Technical Checks','URL Inspection','SF Pages','SF Hreflang Issues','Sitemap URLs','Sitemap Sources','Sitemap Crawl Comparison','Sitemap History','Technical History']),
+        ('数据质量',['Data Status','Run Status','GA4 Data Quality','Page Register Checks','Check Coverage','Period Status','Import Batches','Data Revisions']),
+        ('系统与用量',['AI Usage','Storage Status','Archive Config','Clarity Requests','AI Cache']),
+    ]
+    entries={}
     for book in (store,report):
         if not book:continue
         names=set(book.tabs)|set(book.dirty)
         for tab_name in sorted(names):
             if tab_name.endswith('Guide'):continue
             category,detail=DESCRIPTIONS.get(tab_name,('系统记录','自动化内部记录；请勿改名或删除表头。'))
-            rows.append({'类别':category,'表格或主题':tab_name,'说明':detail,'链接':book.link(tab_name)})
+            entries[tab_name]=(detail,book.link(tab_name))
+    links={}
+    for category,names in groups+[('其他记录',sorted(set(entries)-{n for _,ns in groups for n in ns}))]:
+        for tab_name in names:
+            if tab_name not in entries:continue
+            detail,url=entries[tab_name]
+            rows.append({'类别':category,'表格或主题':tab_name,'说明':detail})
+            links[tab_name]=url
+    for topic,detail in topics:rows.append({'类别':'使用规则','表格或主题':topic,'说明':detail})
     if os.environ.get('IBOOMTO_AI_REPORTS_ENABLED','').lower()!='true':
-        rows.append({'类别':'当前运行状态','表格或主题':'LLM 分析授权','说明':'扩展后的数据传输目前暂未启用；采集和事实视图正常运行。获准将汇总证据发送到 OpenAI 后设置 IBOOMTO_AI_REPORTS_ENABLED=true。','链接':''})
-    store.set(name,rows,headers=['类别','表格或主题','说明','链接'])
+        rows.append({'类别':'当前运行状态','表格或主题':'LLM 分析授权','说明':'扩展后的数据传输目前暂未启用；采集和事实视图正常运行。获准将汇总证据发送到 OpenAI 后设置 IBOOMTO_AI_REPORTS_ENABLED=true。'})
+    store.set(name,rows,headers=['类别','表格或主题','说明'])
+    store.guide_links={name:links}
+    store.dirty.add(name)  # Refresh native hyperlinks even if displayed text is unchanged.
+
+
+def guide_format_requests(sid,rows,links,width=6):
+    """Reset the old guide layout and attach native links to the visible names."""
+    end=len(rows)+1
+    requests=[{'repeatCell':{'range':{'sheetId':sid,'startRowIndex':0,'endRowIndex':end,'endColumnIndex':width},
+        'cell':{'userEnteredFormat':{'backgroundColor':{'red':1,'green':1,'blue':1},'verticalAlignment':'TOP','wrapStrategy':'WRAP',
+            'textFormat':{'fontFamily':'Arial','fontSize':11,'foregroundColor':{'red':.15,'green':.15,'blue':.15}}}},
+        'fields':'userEnteredFormat,textFormatRuns'}},
+        {'repeatCell':{'range':{'sheetId':sid,'startRowIndex':0,'endRowIndex':1,'endColumnIndex':3},
+            'cell':{'userEnteredFormat':{'backgroundColor':{'red':.92,'green':.94,'blue':.96},'textFormat':{'bold':True}}},
+            'fields':'userEnteredFormat.backgroundColor,userEnteredFormat.textFormat.bold'}}]
+    for i,size in enumerate((145,290,760)):
+        requests.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':i,'endIndex':i+1},'properties':{'pixelSize':size},'fields':'pixelSize'}})
+    previous=None
+    for index,row in enumerate(rows,1):
+        category=row['类别'];url=links.get(row['表格或主题'])
+        if category!=previous:
+            requests.append({'repeatCell':{'range':{'sheetId':sid,'startRowIndex':index,'endRowIndex':index+1,'endColumnIndex':1},
+                'cell':{'userEnteredFormat':{'textFormat':{'bold':True},'backgroundColor':{'red':.94,'green':.96,'blue':.98}}},
+                'fields':'userEnteredFormat.textFormat.bold,userEnteredFormat.backgroundColor'}})
+        if url:
+            requests.append({'repeatCell':{'range':{'sheetId':sid,'startRowIndex':index,'endRowIndex':index+1,'startColumnIndex':1,'endColumnIndex':2},
+                'cell':{'userEnteredFormat':{'textFormat':{'link':{'uri':url},'underline':True,'foregroundColor':{'red':.07,'green':.33,'blue':.72}}}},
+                'fields':'userEnteredFormat.textFormat.link,userEnteredFormat.textFormat.underline,userEnteredFormat.textFormat.foregroundColor'}})
+        previous=category
+    requests.append({'autoResizeDimensions':{'dimensions':{'sheetId':sid,'dimension':'ROWS','startIndex':0,'endIndex':end}}})
+    return requests

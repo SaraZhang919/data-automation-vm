@@ -135,6 +135,9 @@ class Sheets:
             head=ordered_headers(name,head);self.headers[name]=head
             prior=getattr(self,'original',{}).get(name,[])
             width=max(len(head),len(prior[0]) if prior else 0)
+            if name.endswith('Guide'):
+                # Legacy guide rows can have trailing content beyond their short header.
+                width=max(width,max((len(row) for row in prior),default=0))
             matrix=[head+['']*(width-len(head))]+[[cell(row.get(k,"")) for k in head]+['']*(width-len(head)) for row in rows]
             if self.old_sizes.get(name,0)>len(matrix):
                 matrix += [[""]*width for _ in range(self.old_sizes[name]-len(matrix))]
@@ -176,6 +179,9 @@ class Sheets:
                         formatting.append({'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':len(rows)+1,'startColumnIndex':index,'endColumnIndex':index+1},'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}})
                 if rows:formatting.append({'autoResizeDimensions':{'dimensions':{'sheetId':sid,'dimension':'ROWS','startIndex':1,'endIndex':len(rows)+1}}})
             formats.extend(formatting)
+            if name in getattr(self,'guide_links',{}):
+                from .guide import guide_format_requests
+                formats.extend(guide_format_requests(sid,rows,self.guide_links[name],width))
         batch=[];size=0
         for write in writes:
             n=len(json.dumps(write,ensure_ascii=False).encode())
