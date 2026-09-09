@@ -1,3 +1,13 @@
+# iBoomto Site Monitoring
+
+The active iBoomto implementation and operating instructions are in [IBOOMTO_RUNBOOK.md](IBOOMTO_RUNBOOK.md).
+Use **Actions → iBoomto Monitor** for daily collection, period reports and deep analysis.
+The two Manual workflow entrypoints now query iBoomto. Legacy Vidmud schedules remain disabled and historical data is preserved.
+
+## Legacy Vidmud documentation
+
+The following describes the archived implementation, not the current iBoomto collector.
+
 # Vidmud SEO Data Automation
 
 Automatically pulls GA4 + GSC data for all Vidmud subdomains, writes to Google Sheets, and highlights alert thresholds.
