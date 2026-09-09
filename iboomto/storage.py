@@ -7,10 +7,17 @@ from .core import digest, stamp
 class ApiFailure(RuntimeError):
     pass
 
+_last_sheet_write=0.0
+
 def request(session, method, url, **kwargs):
+    global _last_sheet_write
+    timeout=kwargs.pop('timeout',60)
     for attempt in range(4):
+        if method!='GET' and 'sheets.googleapis.com/' in url:
+            time.sleep(max(0,1.15-(time.monotonic()-_last_sheet_write)))
+            _last_sheet_write=time.monotonic()
         try:
-            r = session.request(method, url, timeout=kwargs.pop("timeout", 60), **kwargs)
+            r = session.request(method, url, timeout=timeout, **kwargs)
         except Exception as exc:
             if attempt == 3: raise ApiFailure(type(exc).__name__) from None
             time.sleep(2**attempt)
@@ -19,7 +26,7 @@ def request(session, method, url, **kwargs):
         if r.status_code not in (429,500,502,503,504) or attempt == 3:
             # Do not expose authorization headers, server echoes, or query data.
             raise ApiFailure(f"HTTP {r.status_code}")
-        time.sleep(min(30, max(2**attempt, int(r.headers.get('Retry-After','0')) if r.headers.get('Retry-After','0').isdigit() else 0)))
+        time.sleep(min(60, max(30 if r.status_code==429 else 2**attempt, int(r.headers.get('Retry-After','0')) if r.headers.get('Retry-After','0').isdigit() else 0)))
     raise ApiFailure("Request failed")
 
 def google_session():
@@ -75,12 +82,12 @@ class Sheets:
     def set(self, name, rows, headers=None):
         if name == 'Properties': raise ValueError("Properties is read only")
         self.read(name)
-        self.cache[name]=rows
         head=list(headers or self.headers[name])
         for row in rows:
             for k in row:
                 if k not in head: head.append(k)
-        self.headers[name]=head; self.dirty.add(name)
+        if rows==self.cache[name] and head==self.headers[name]:return
+        self.cache[name]=rows; self.headers[name]=head; self.dirty.add(name)
 
     def upsert(self, name, rows, keys=("id",), replace_where=None):
         old=self.read(name)
@@ -92,31 +99,55 @@ class Sheets:
 
     def flush(self):
         if not self.write: return
-        for name in sorted(self.dirty):
+        names=[n for n in sorted(self.dirty) if self.headers[n]]
+        if not names:return
+        edits=[]
+        for name in names:
             rows=self.cache[name]; head=self.headers[name]
-            if not head: continue
             needed=max(100,len(rows)+1,self.old_sizes.get(name,0))
-            requests=[]
             if name not in self.tabs:
-                requests.append({"addSheet":{"properties":{"title":name,"gridProperties":{"rowCount":needed,"columnCount":max(26,len(head)),"frozenRowCount":1}}}})
+                edits.append({"addSheet":{"properties":{"title":name,"gridProperties":{"rowCount":needed,"columnCount":max(26,len(head)),"frozenRowCount":1}}}})
             else:
                 p=self.tabs[name]
-                requests.append({"updateSheetProperties":{"properties":{"sheetId":p['sheetId'],"gridProperties":{"rowCount":max(needed,p['gridProperties']['rowCount']),"columnCount":max(len(head),p['gridProperties']['columnCount'])}},"fields":"gridProperties.rowCount,gridProperties.columnCount"}})
-            result=request(self.s,"POST",self.base+":batchUpdate",json={"requests":requests}).json()
-            if name not in self.tabs: self.tabs[name]=result['replies'][0]['addSheet']['properties']
-            def cell(v):
-                if isinstance(v,(dict,list)): return json.dumps(v,ensure_ascii=False,separators=(',',':'))
-                return "" if v is None else v
+                edits.append({"updateSheetProperties":{"properties":{"sheetId":p['sheetId'],"gridProperties":{"rowCount":max(needed,p['gridProperties']['rowCount']),"columnCount":max(len(head),p['gridProperties']['columnCount'])}},"fields":"gridProperties.rowCount,gridProperties.columnCount"}})
+        result=request(self.s,'POST',self.base+':batchUpdate',json={'requests':edits}).json()
+        for reply in result.get('replies',[]):
+            if 'addSheet' in reply:
+                prop=reply['addSheet']['properties'];self.tabs[prop['title']]=prop
+        writes=[];formats=[]
+        def cell(v):
+            if isinstance(v,(dict,list)):v=json.dumps(v,ensure_ascii=False,separators=(',',':'))
+            if isinstance(v,str) and len(v)>49000:raise ApiFailure('Cell exceeds Sheets limit; split evidence before writing')
+            return '' if v is None else v
+        for name in names:
+            rows=self.cache[name];head=self.headers[name]
             matrix=[head]+[[cell(row.get(k,"")) for k in head] for row in rows]
             if self.old_sizes.get(name,0)>len(matrix):
                 matrix += [[""]*len(head) for _ in range(self.old_sizes[name]-len(matrix))]
             for start in range(0,len(matrix),500):
-                rng=quote(f"'{name}'!A{start+1}",safe="")
-                request(self.s,"PUT",self.base+"/values/"+rng,params={"valueInputOption":"RAW"},json={"values":matrix[start:start+500]})
+                writes.append({'range':f"'{name}'!A{start+1}",'values':matrix[start:start+500]})
             sid=self.tabs[name]['sheetId']
-            request(self.s,"POST",self.base+":batchUpdate",json={"requests":[
+            formats.extend([
                 {"repeatCell":{"range":{"sheetId":sid,"startRowIndex":0,"endRowIndex":1},"cell":{"userEnteredFormat":{"backgroundColor":{"red":.10,"green":.20,"blue":.30},"textFormat":{"bold":True,"foregroundColor":{"red":1,"green":1,"blue":1}},"wrapStrategy":"WRAP"}},"fields":"userEnteredFormat"}},
                 {"updateSheetProperties":{"properties":{"sheetId":sid,"gridProperties":{"frozenRowCount":1}},"fields":"gridProperties.frozenRowCount"}}
-            ]})
+            ])
+            # Keep working tables readable; bounded row formatting never touches Properties.
+            formatting=[{'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':len(rows)+1,'endColumnIndex':len(head)},
+                                      'cell':{'userEnteredFormat':{'wrapStrategy':'CLIP','textFormat':{'fontFamily':'Arial','fontSize':10},'verticalAlignment':'TOP'}},'fields':'userEnteredFormat'}}] if rows else []
+            if name=='Overview':
+                formatting += [{'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':2,'endIndex':3},'properties':{'pixelSize':760},'fields':'pixelSize'}},
+                               {'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':len(rows)+1,'startColumnIndex':2,'endColumnIndex':3},'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}},
+                               {'autoResizeDimensions':{'dimensions':{'sheetId':sid,'dimension':'ROWS','startIndex':1,'endIndex':len(rows)+1}}}]
+            formats.extend(formatting)
+        batch=[];size=0
+        for write in writes:
+            n=len(json.dumps(write,ensure_ascii=False).encode())
+            if batch and size+n>1500000:
+                request(self.s,'POST',self.base+'/values:batchUpdate',json={'valueInputOption':'RAW','data':batch});batch=[];size=0
+            batch.append(write);size+=n
+        if batch:request(self.s,'POST',self.base+'/values:batchUpdate',json={'valueInputOption':'RAW','data':batch})
+        request(self.s,'POST',self.base+':batchUpdate',json={'requests':formats})
+        for name in names:
+            rows=self.cache[name]
             self.old_sizes[name]=len(rows)+1
         self.dirty.clear()

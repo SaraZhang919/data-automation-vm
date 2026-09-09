@@ -1,0 +1,91 @@
+name: iBoomto Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [daily, weekly-preview, monthly, manual, deep]
+        default: daily
+      source:
+        type: choice
+        options: [all, ga, gsc, technical, sf, clarity]
+        default: all
+      start_date:
+        description: Optional YYYY-MM-DD; required for manual
+        type: string
+      end_date:
+        description: Optional YYYY-MM-DD; required for manual
+        type: string
+      language:
+        type: choice
+        options: [all, en, ar, ja, zh-tw, es, de, fr, it, pt]
+        default: all
+      url:
+        description: Exact iBoomto URL
+        type: string
+      prefix:
+        description: Path prefix, such as /essential-tools
+        type: string
+      question:
+        description: Question or issue ID for deep analysis
+        type: string
+      force:
+        description: Regenerate the report explicitly
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iboomto-sheets-writer
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements-iboomto.txt
+      - name: Verify metric and ingestion invariants
+        run: python -m unittest discover -s tests -v
+      - name: Collect and report
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLARITY_API_TOKEN: ${{ secrets.CLARITY_API_TOKEN }}
+          IBOOMTO_SHEET_ID: '1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs'
+          IBOOMTO_REPORT_SHEET_ID: '15jBCSt2FqujGjm-L8-PFZTpkMCSDtJVKDl1rEANNNKU'
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_SOURCE: ${{ inputs.source }}
+          INPUT_START: ${{ inputs.start_date }}
+          INPUT_END: ${{ inputs.end_date }}
+          INPUT_LANGUAGE: ${{ inputs.language }}
+          INPUT_URL: ${{ inputs.url }}
+          INPUT_PREFIX: ${{ inputs.prefix }}
+          INPUT_QUESTION: ${{ inputs.question }}
+          INPUT_FORCE: ${{ inputs.force }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: python -m iboomto.dispatch
+      - name: Publish operational status
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = Path('runtime/latest.json')
+          if p.exists():
+              d = json.loads(p.read_text())
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+                  f.write('## iBoomto monitoring\n\n')
+                  for s in d['statuses']:
+                      f.write(f"- {s['source']}: {s['status']}\n")
+                  f.write('\n[Daily Report](https://docs.google.com/spreadsheets/d/15jBCSt2FqujGjm-L8-PFZTpkMCSDtJVKDl1rEANNNKU/edit)\n')
+          PY
+

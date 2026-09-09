@@ -68,7 +68,9 @@ class Analytics:
             raise ApiFailure('GSC sc-domain:iboomto.com not accessible')
 
     def inspection(self,url):
-        return request(self.s,'POST','https://searchconsole.googleapis.com/v1/urlInspection/index:inspect',json={'inspectionUrl':url,'siteUrl':'sc-domain:iboomto.com','languageCode':'en-US'}).json().get('inspectionResult',{})
+        r=self.s.post('https://searchconsole.googleapis.com/v1/urlInspection/index:inspect',json={'inspectionUrl':url,'siteUrl':'sc-domain:iboomto.com','languageCode':'en-US'},timeout=(10,20))
+        if r.status_code!=200:raise ApiFailure(f'URL Inspection HTTP {r.status_code}')
+        return r.json().get('inspectionResult',{})
 
 def ga_filter(exact='',prefix=''):
     expr=[{'filter':{'fieldName':'hostName','stringFilter':{'matchType':'EXACT','value':'www.iboomto.com'}}}]
@@ -129,6 +131,25 @@ def collect_ga(api,store,prop,start,end,now,period='daily',exact='',prefix='',ma
         result+=packed
     return {'rows':len(result),'timezone':tz,'status':ga_quality({},end,tz,now,start)}
 
+def collect_business_events(api,store,prop,start,end,now):
+    mappings=[r for r in store.read('Event Mapping') if str(r.get('confirmed','')).lower()=='true' and r.get('event_name') and r.get('language','all') in ('all',prop['language'])]
+    tz=api.ga_timezone(prop['id']);records=[]
+    groups={}
+    for m in mappings:groups.setdefault(m['business_action'],set()).update(x.strip() for x in m['event_name'].split(',') if x.strip())
+    totals={r['end']:r for r in store.read('GA4 Daily') if str(r.get('property'))==prop['id']}
+    for action,names in groups.items():
+        filters=ga_filter()
+        filters['andGroup']['expressions'].append({'filter':{'fieldName':'eventName','inListFilter':{'values':sorted(names)}}})
+        rows,meta=api.ga(prop['id'],max(start,LAUNCH),end,['date'],['eventCount','totalUsers'],filters)
+        for row in rows:
+            d=date.fromisoformat(row['date']);denom=totals.get(str(d),{}).get('totalUsers')
+            record={'id':digest([prop['id'],str(d),action]),'property':prop['id'],'language':prop['language'],'start':str(d),'end':str(d),'action':action,
+                    'event_names':sorted(names),'event_count':row['eventCount'],'converting_users':row['totalUsers'],'eligible_users':denom,
+                    'user_conversion_rate':row['totalUsers']/denom if denom else '', 'quality':ga_quality(meta,d,tz,now,d),'timezone':tz,'collected_at':stamp()}
+            records.append(record)
+    store.upsert('GA4 Business Events',records)
+    return {'status':'success' if mappings else 'not_configured','mapped_actions':list(groups),'rows':len(records)}
+
 def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix='',manual=False):
     if end<LAUNCH:return {'rows':0,'status':'prelaunch'}
     qstart=max(start,LAUNCH)
@@ -168,6 +189,19 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
             old={r.get('id'):r for r in store.read(tab)}
             for i,r in enumerate(packed):
                 if old.get(r['id'],{}).get('quality')=='final' and r['quality']=='provisional': packed[i]=old[r['id']]
-            store.upsert(tab,packed)
+            revisions=[]
+            for r in packed:
+                before=old.get(r['id'])
+                if before and any(str(before.get(k,''))!=str(r.get(k,'')) for k in ('clicks','impressions','ctr','position')):
+                    revisions.append({'id':digest([r['id'],r['collected_at']]),'record_id':r['id'],'source':tab,'date':r['end'],
+                                      'old_metrics':{k:before.get(k) for k in ('clicks','impressions','ctr','position')},
+                                      'new_metrics':{k:r.get(k) for k in ('clicks','impressions','ctr','position')},'revised_at':r['collected_at']})
+            store.upsert('Data Revisions',revisions)
+            # Replace only finalized, uncapped query partitions. Missing dates remain missing, not zero.
+            def partition(r):
+                return (not capped and bool(final_through) and r.get('source')=='GSC' and r.get('language')==lg and r.get('period')==period
+                        and str(qstart)<=r.get('end','')<=min(str(end),final_through) and r.get('scope')==scope
+                        and (not manual or r.get('view')==suffix))
+            store.upsert(tab,packed,replace_where=partition)
             total+=len(packed)
     return {'rows':total,'final_through':final_through,'status':'final' if complete else 'pending'}

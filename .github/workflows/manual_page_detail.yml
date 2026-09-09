@@ -1,70 +1,50 @@
-name: Manual Page Detail
-
+name: Manual Page Detail — iBoomto
 on:
   workflow_dispatch:
     inputs:
       start_date:
-        description: "Start date (YYYY-MM-DD)"
+        description: Start date YYYY-MM-DD
         required: true
       end_date:
-        description: "End date (YYYY-MM-DD)"
+        description: End date YYYY-MM-DD
         required: true
-      page_name:
-        description: "Page name to filter (e.g. Home, About, Pricing)"
-        required: true
-      url_filter:
-        description: "Optional: narrow to one specific URL (leave blank for all matching URLs)"
-        required: false
-        default: ""
-      data_source:
-        description: "Which data to pull"
-        required: true
-        default: "both"
+      source:
         type: choice
-        options:
-          - both
-          - ga4_only
-          - gsc_only
-
+        options: [all, ga, gsc]
+        default: all
+      language:
+        type: choice
+        options: [all, en, ar, ja, zh-tw, es, de, fr, it, pt]
+        default: all
+      url:
+        description: Exact iBoomto page URL
+        required: true
+      prefix:
+        description: Optional path prefix
+permissions:
+  contents: read
+concurrency:
+  group: iboomto-sheets-writer
+  cancel-in-progress: false
 jobs:
-  manual-page-detail:
+  query:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.6.0
         with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run Manual Page Detail GA4
-        if: ${{ github.event.inputs.data_source == 'both' || github.event.inputs.data_source == 'ga4_only' }}
+          python-version: '3.12'
+      - run: pip install -r requirements-iboomto.txt
+      - name: Query iBoomto and the equal-length baseline
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          SHEET_ID: ${{ secrets.SHEET_ID }}
-        run: |
-          python scripts/manual_page_detail_ga4.py \
-            --start "${{ github.event.inputs.start_date }}" \
-            --end "${{ github.event.inputs.end_date }}" \
-            --page_name "${{ github.event.inputs.page_name }}" \
-            --url_filter "${{ github.event.inputs.url_filter }}"
-
-      - name: Run Manual Page Detail GSC
-        if: ${{ github.event.inputs.data_source == 'both' || github.event.inputs.data_source == 'gsc_only' }}
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          SHEET_ID: ${{ secrets.SHEET_ID }}
-        run: |
-          python scripts/manual_page_detail_gsc.py \
-            --start "${{ github.event.inputs.start_date }}" \
-            --end "${{ github.event.inputs.end_date }}" \
-            --page_name "${{ github.event.inputs.page_name }}" \
-            --url_filter "${{ github.event.inputs.url_filter }}"
+          IBOOMTO_SHEET_ID: '1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs'
+          INPUT_MODE: manual
+          INPUT_START: ${{ inputs.start_date }}
+          INPUT_END: ${{ inputs.end_date }}
+          INPUT_SOURCE: ${{ inputs.source }}
+          INPUT_LANGUAGE: ${{ inputs.language }}
+          INPUT_URL: ${{ inputs.url }}
+          INPUT_PREFIX: ${{ inputs.prefix }}
+        run: python -m iboomto.dispatch

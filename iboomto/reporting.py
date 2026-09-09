@@ -9,9 +9,15 @@ DEFAULT_THRESHOLDS=[
     {'id':'counts-small','version':RULE_VERSION,'min':20,'max':100,'yellow_pct':.5,'yellow_absolute':20,'red_pct':.7,'red_absolute':40},
     {'id':'counts-medium','version':RULE_VERSION,'min':100,'max':1000,'yellow_pct':.3,'yellow_absolute':30,'red_pct':.5,'red_absolute':50},
     {'id':'counts-large','version':RULE_VERSION,'min':1000,'max':1e15,'yellow_pct':.2,'yellow_absolute':200,'red_pct':.35,'red_absolute':350}]
+RATE_RULES=[
+    {'id':'rate-engagementRate','version':RULE_VERSION,'min_denominator':100,'min_converters':0,'yellow_relative':0,'yellow_points':.10,'red_relative':0,'red_points':.20},
+    {'id':'rate-ctr','version':RULE_VERSION,'min_denominator':500,'min_converters':0,'yellow_relative':.30,'yellow_points':.01,'red_relative':.50,'red_points':.02},
+    {'id':'rate-user_conversion_rate','version':RULE_VERSION,'min_denominator':100,'min_converters':20,'yellow_relative':.30,'yellow_points':.03,'red_relative':.50,'red_points':.05}]
 
 def initialise_config(store):
     if not store.read('Thresholds'):store.set('Thresholds',DEFAULT_THRESHOLDS)
+    known={r['id'] for r in store.read('Thresholds')}
+    store.upsert('Thresholds',[r for r in RATE_RULES if r['id'] not in known])
     if not store.read('Priority Pages'):
         from .core import SITE,LANGS
         store.set('Priority Pages',[{'url':SITE+'/' if l=='en' else SITE+'/'+l,'enabled':True,'reason':'Language homepage'} for l in LANGS])
@@ -20,7 +26,9 @@ def initialise_config(store):
     if not store.read('Page Map'):store.set('Page Map',[],headers=['url','language','page_type','equivalent_group','published_at'])
 
 def metric_findings(store):
-    rules=[tuple(float(r[k]) for k in ('min','max','yellow_pct','yellow_absolute','red_pct','red_absolute')) for r in store.read('Thresholds')]
+    rules=[tuple(float(r[k]) for k in ('min','max','yellow_pct','yellow_absolute','red_pct','red_absolute')) for r in store.read('Thresholds') if r['id'].startswith('counts-')]
+    if len(rules)!=3 or any(r[0]>=r[1] or not 0<=r[2]<=r[4]<=1 or r[3]>r[5] for r in rules):raise ValueError('Invalid count thresholds')
+    rates={r['id']:r for r in store.read('Thresholds') if r['id'].startswith('rate-')}
     found=[];comparisons=[]
     for tab,metrics in [('GA4 Daily',['sessions','activeUsers']),('GSC Daily',['clicks','impressions'])]:
         groups={}
@@ -45,9 +53,46 @@ def metric_findings(store):
                 if level in ('yellow','red'):
                     found.append(issue('metric_'+metric,tab+':'+group[0],level,row,current['collected_at'],tab))
     store.upsert('Metric Comparisons',comparisons)
+    # Ratios use comparable populations and percentage points, not raw percent differences alone.
+    for tab,metric,denominator,numerator,yellow,red in [
+        ('GA4 Daily','engagementRate','sessions',None,(0,.10),(0,.20)),
+        ('GSC Daily','ctr','impressions',None,(.30,.01),(.50,.02)),
+        ('GA4 Business Events','user_conversion_rate','eligible_users','converting_users',(.30,.03),(.50,.05))]:
+        rows=[r for r in store.read(tab) if r.get('quality') in ('mature','final')]
+        groups={}
+        for r in rows:groups.setdefault((r.get('language'),r.get('property',''),r.get('action','')), {})[r['end']]=r
+        for key,items in groups.items():
+            cur=items[max(items)];d=date.fromisoformat(cur['end']);base=items.get(str(d-timedelta(days=7)))
+            if not base or any(str(d-timedelta(days=i)) not in items for i in range(1,8)):continue
+            rule=rates['rate-'+metric]
+            yellow=(float(rule['yellow_relative']),float(rule['yellow_points']));red=(float(rule['red_relative']),float(rule['red_points']))
+            min_denom=float(rule['min_denominator'])
+            if min(float(cur.get(denominator) or 0),float(base.get(denominator) or 0))<min_denom:continue
+            if numerator and float(base.get(numerator) or 0)<float(rule['min_converters']):continue
+            b=float(base.get(metric) or 0);c=float(cur.get(metric) or 0)
+            drop=b-c;relative=drop/b if b else 0
+            level='red' if drop>=red[1] and relative>=red[0] else 'yellow' if drop>=yellow[1] and relative>=yellow[0] else 'normal'
+            if level!='normal':found.append(issue('rate_'+metric,tab+':'+':'.join(key),level,{'date':cur['end'],'baseline_date':base['end'],'value':c,'baseline':b,'drop_percentage_points':drop*100},cur['collected_at'],tab))
+    periods=[]
+    for source,metrics in [('GA4',['sessions','activeUsers']),('GSC',['clicks','impressions'])]:
+        for kind in ('Weekly','Monthly','Rolling28'):
+            tab=f'{source} {kind} Daily';groups={}
+            for r in store.read(tab):
+                if r.get('quality') in ('mature','final'):groups.setdefault(r['language'],[]).append(r)
+            for lang,rows in groups.items():
+                rows.sort(key=lambda x:x['end'])
+                if len(rows)<2:continue
+                cur,base=rows[-1],rows[-2]
+                if date.fromisoformat(base['end'])+timedelta(days=1)!=date.fromisoformat(cur['start']):continue
+                for metric in metrics:
+                    c=float(cur[metric]);b=float(base[metric]);level=count_alert(c,b,metric,rules)
+                    detail={'id':digest([tab,lang,metric,cur['end']]),'source':tab,'language':lang,'metric':metric,'start':cur['start'],'end':cur['end'],'baseline_start':base['start'],'baseline_end':base['end'],'value':c,'baseline':b,'change':c-b,'change_ratio':(c-b)/b if b else '', 'severity':level,'rule_version':RULE_VERSION}
+                    periods.append(detail)
+                    if level in ('yellow','red'):found.append(issue('period_'+metric,tab+':'+lang,level,detail,cur['collected_at'],tab))
+    store.upsert('Period Comparisons',periods)
     return found
 
-def reconcile_issues(report,findings,checked):
+def reconcile_issues(report,findings,checked,store=None):
     old={r['id']:r for r in report.read('Issues')};active=set()
     for f in findings:
         prior=old.get(f['id'],{});active.add(f['id'])
@@ -59,6 +104,16 @@ def reconcile_issues(report,findings,checked):
     for key,r in old.items():
         if key not in active and r.get('source')=='Technical Checks' and r.get('url') in checked:
             r.update({'state':'resolved','resolved_at':stamp()})
+        if key not in active and store is not None and r.get('kind','').startswith(('metric_','period_')):
+            metric=r['kind'].split('_',1)[1]
+            tab='Period Comparisons' if r['kind'].startswith('period_') else 'Metric Comparisons'
+            candidates=[x for x in store.read(tab) if x.get('source')==r.get('source') and x.get('metric')==metric and r.get('url','').endswith(':'+x.get('language',''))]
+            if candidates:
+                latest=max(candidates,key=lambda x:x.get('date',x.get('end','')))
+                prior_evidence=r.get('evidence',{})
+                if isinstance(prior_evidence,str):prior_evidence=json.loads(prior_evidence)
+                prior_date=prior_evidence.get('date',prior_evidence.get('end',''))
+                if latest.get('date',latest.get('end',''))>prior_date and latest.get('severity')=='normal':r.update({'state':'resolved','resolved_at':stamp()})
     report.set('Issues',list(old.values()),headers=['id','kind','url','severity','state','first_seen','last_seen','resolved_at','source','evidence'])
     return list(old.values())
 
@@ -80,7 +135,7 @@ def evidence(store,statuses,issues):
     mapping=store.read('Event Mapping')
     missing=[r['business_action'] for r in mapping if str(r.get('confirmed','')).lower()!='true' or not r.get('event_name')]
     return {'generated_at':stamp(),'data_status':statuses,'latest_metrics':latest,'period_metrics':periods,
-            'metric_comparisons':store.read('Metric Comparisons'), 'issues':[x for x in issues if x.get('state')!='resolved'],
+            'metric_comparisons':store.read('Metric Comparisons'), 'period_comparisons':store.read('Period Comparisons'), 'issues':[x for x in issues if x.get('state')!='resolved'],
             'event_mapping_missing':missing,'sf_batches':store.read('Import Batches'),
             'clarity':store.read('Clarity Daily'), 'period_status':store.read('Period Status'),
             'rules':store.read('Thresholds'),'limitations':['GA properties are independent: do not sum users as globally deduplicated users.',
@@ -127,12 +182,32 @@ def ai_analyse(payload,report,kind='daily',question='',force=False):
     report.upsert('AI Cache',[{'id':cache_id,'generated_at':stamp(),'result':result}])
     return result
 
-def generate_report(store,report,statuses,issues,run_id,report_date,kind='daily',question='',force=False):
+def generate_report(store,report,statuses,issues,run_id,report_date,kind='daily',question='',force=False,selection=None):
     name='Deep Analysis' if kind=='deep' else 'Daily History'
-    rid=digest([str(report_date),kind,question])
+    rid=digest([str(report_date),kind,question,selection if kind=='deep' else None])
     prior=next((r for r in report.read(name) if r.get('id')==rid),None)
     if prior and prior.get('ai_status')=='success' and not force:return {'status':'cached','report_id':rid}
     payload=evidence(store,statuses,issues)
+    if kind=='deep':
+        from .core import select_url
+        selection=selection or {}
+        payload['requested_selection']=selection
+        details=[]
+        for tab in ('GA4 Daily','GA4 Channels','GA4 Landing Pages','GA4 Events','GA4 Business Events','GSC Daily','GSC Pages','GSC Queries'):
+            for r in store.read(tab):
+                if selection.get('start') and r.get('end','')<selection['start']:continue
+                if selection.get('end') and r.get('start','')>selection['end']:continue
+                if selection.get('language','all')!='all' and r.get('language')!=selection['language']:continue
+                dim=r.get('dimensions',{})
+                if isinstance(dim,str):dim=json.loads(dim)
+                url=dim.get('url') or dim.get('page')
+                if selection.get('url') or selection.get('prefix'):
+                    if not url or not select_url(url,selection.get('language','all'),selection.get('url',''),selection.get('prefix','')):continue
+                details.append({**r,'table':tab})
+        payload['selected_history']=details
+        if any(selection.get(k) for k in ('start','end','url','prefix')) or selection.get('language','all')!='all':
+            payload['latest_metrics']=[];payload['period_metrics']=[];payload['metric_comparisons']=[];payload['period_comparisons']=[]
+        payload['limitations'].append('Selected history uses stored records; absent dates are not inferred or zero-filled.')
     fallback={'summary':'事实数据已更新；AI 分析尚未完成。','findings':[], 'actions':[], 'deep_analysis_candidates':[], 'limitations':[]}
     state='success'
     try:analysis=ai_analyse(payload,report,kind,question,force)

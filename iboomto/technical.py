@@ -66,6 +66,7 @@ def check_pages(store,web,urls,now):
     priority={r['url'] for r in store.read('Priority Pages') if r.get('enabled',True) not in (False,'false','FALSE') and r.get('url')}
     priority|={SITE+'/' if lg=='en' else SITE+'/'+lg for lg in LANGS}
     candidates={r['url'] for r in urls if language(r['url']) is not None}|priority
+    candidates|={r['url'] for r in store.read('SF Pages') if str(r.get('status','')).startswith(('4','5')) and language(r['url']) is not None}
     old={r['url']:r for r in store.read('Technical Checks')}
     candidates=sorted(candidates,key=lambda u:(u not in priority,u in old,old.get(u,{}).get('checked_at',''),u))[:500]
     robots=None; robots_status='unavailable'
@@ -89,7 +90,7 @@ def check_pages(store,web,urls,now):
             hreflang={x.get('hreflang'):urljoin(r.url,x.get('href','')) for x in soup.find_all('link',hreflang=True)} if soup else {}
             rec.update({'status':r.status_code,'final_url':r.url,'response_seconds':r.elapsed.total_seconds(),'canonical':urljoin(r.url,canonical.get('href','')) if canonical else '',
                         'robots':directives,'googlebot_allowed':robots.can_fetch('Googlebot',url) if robots else '', 'hreflang':hreflang,'check_status':'success'})
-            checked.add(url)
+            if robots_status!='unavailable':checked.add(url)
             if r.status_code>=400:issues.append(issue('http_error',url,'red' if url in priority else 'yellow',f'Confirmed HTTP {r.status_code}',rec['checked_at']))
             if 'noindex' in directives.lower():issues.append(issue('noindex',url,'red' if url in priority else 'yellow',directives,rec['checked_at']))
             if robots and not rec['googlebot_allowed']:issues.append(issue('robots_blocked',url,'red' if url in priority else 'yellow','Googlebot blocked by robots.txt',rec['checked_at']))
@@ -169,7 +170,11 @@ def sf_import(session,store,now):
             imported+=1
         except Exception as exc:
             store.upsert('Import Batches',[{**rec,'status':'failed','detail':type(exc).__name__}])
-    return issues,{'imported':imported,'latest_batch':latest_time,'status':'success' if latest_time else 'waiting_for_upload'}
+    from .core import LAUNCH
+    age=(now.date()-datetime.strptime(latest_time,'%Y%m%d').date()).days if latest_time else None
+    allowed_age=4 if (now.date()-LAUNCH).days<30 else 7
+    state='waiting_for_upload' if not latest_time else 'stale' if age>allowed_age else 'success'
+    return issues,{'imported':imported,'latest_batch':latest_time,'age_days':age,'status':state}
 
 def clarity_collect(store,token,now):
     if not token:return {'status':'not_configured','detail':'CLARITY_API_TOKEN missing'}
