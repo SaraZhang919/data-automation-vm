@@ -118,10 +118,13 @@ def reconcile_issues(report,findings,checked,store=None):
     return list(old.values())
 
 def evidence(store,statuses,issues):
-    latest=[]
+    latest=[];coverage=[]
     for tab in ('GA4 Daily','GSC Daily'):
         grouped={}
-        for r in store.read(tab):
+        source_rows=store.read(tab)
+        dates=sorted({r['end'] for r in source_rows})
+        coverage.append({'source':tab,'stored_dates':dates,'available_date_count':len(dates)})
+        for r in source_rows:
             k=(r.get('language'),r.get('property',''),r.get('quality'))
             if k not in grouped or r['end']>grouped[k]['end']:grouped[k]=r
         latest += [{**r,'table':tab} for r in grouped.values()]
@@ -134,7 +137,7 @@ def evidence(store,statuses,issues):
         periods +=[{**r,'table':tab} for r in groups.values()]
     mapping=store.read('Event Mapping')
     missing=[r['business_action'] for r in mapping if str(r.get('confirmed','')).lower()!='true' or not r.get('event_name')]
-    return {'generated_at':stamp(),'data_status':statuses,'latest_metrics':latest,'period_metrics':periods,
+    return {'generated_at':stamp(),'data_status':statuses,'historical_coverage':coverage,'latest_metrics':latest,'period_metrics':periods,
             'metric_comparisons':store.read('Metric Comparisons'), 'period_comparisons':store.read('Period Comparisons'), 'issues':[x for x in issues if x.get('state')!='resolved'],
             'event_mapping_missing':missing,'sf_batches':store.read('Import Batches'),
             'clarity':store.read('Clarity Daily'), 'period_status':store.read('Period Status'),
