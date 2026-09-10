@@ -48,7 +48,9 @@ DESCRIPTIONS={
  'Issues':('行动清单','P1关键页或核心采集故障；P2局部SEO/成熟指标异常；P3观察机会。看 priority_reason、证据和来源链接。'),
  'Data Status':('数据质量','报告所用来源的运行状态与时间；未配置/延迟/失败不能当成正常。'),
  'Deep Analysis':('按需分析','Actions 手动 deep 模式，填写日期、语言、URL和问题；读取所选历史证据。'),
- 'AI Usage':('模型审计','input_tokens / output_tokens / total_tokens 为API实际用量；reasoning_tokens包含在output_tokens内。另记发送字符数、模型响应版本、提示词版本。日/周/月 gpt-5.6-sol medium；deep high。'),
+ 'AI Usage':('模型审计','每次实际模型请求一行：模块token本地估算、API实际input/output/total、阶段、费用估算、状态。reasoning包含在output内；超时费用未知，不记免费。模型不变：日/周/月Sol medium，deep high。'),
+ 'AI Run Usage':('报告用量','每份报告一行，汇总实际API次数、缓存命中、已知输入/输出与费用；分批及最终汇总均计入。同一GitHub run可生成日报和周报。'),
+ 'API Usage':('采集配额','当前进程Google API请求数、重试、429/403/服务错误、分钟峰值及GA返回配额。GA quota token不是LLM token。Sheets读/写分别限速，GSC负载剩余额度不可查询；其他客户端用量不在本进程计数内。'),
  'AI Cache':('系统内部','相同证据的 AI 缓存，可以隐藏；不应手动编辑。'),
 }
 
@@ -71,7 +73,7 @@ def update_guide(store,report=None):
         ('缺失值显示','自动GA/GSC/Clarity指标缺失或不适用、页面名称/类型未映射时显示n.a.，真实0保留为数值。程序读取受支持字段时还原为缺失，不把n.a.计成0。人工源表、配置、备注和人工列不填充。'),
         ('容量策略','日明细90天；站点日汇总365天；周104周；月36个月。仅归档写入并回读校验成功后移除旧记录，失败保留并报状态。'),
         ('报告与LLM','程序负责采集、清洗、阈值、对比及优先级。LLM分析周期匹配的业务事件、页面/渠道摘要和异常。无业务事件返回不报零；事实每次刷新，AI文本有独立日期与版本。'),
-        ('LLM发送内容','发送结构化汇总，不发送服务器原始日志、录屏、完整SF文件、密钥或整本表格。Clarity只发送最新总体快照及最新Top20页面快照，不发送全部URL响应或页面历史。普通分析保留所选GA/GSC页面和关键词级聚合指标。'),
+        ('LLM发送内容','日报关键词先汇总全部入选词；每语言不超过20词时全附，超过时每类别最多5个代表词去重，再保留所有明确警报或显著增长。周/月保留入选并集。比较仅发送每来源/语言/周期最新统计日及必要基线；来源日期分别保留。Clarity仅最新快照。'),
         ('Clarity频率与窗口','自2026/09/10起每48小时、17:00 JST采集最近72小时，正常每批2个API请求；日报任务检查是否到期，成功后次日跳过。失败视图可在下一次运行重试。重叠窗口不可相加为周/月总数。'),
         ('软件下载设置','各GA属性需要实际发送software_download或通过创建事件规则生成；仅添加Key event名称不会转换dl_*；新建事件不回填过去。'),
         ('服务器日志','目前尚未接入网站CDN访问日志。此处不包含安装包日志分析；软件下载仅使用GA事件。'),
@@ -82,7 +84,7 @@ def update_guide(store,report=None):
         ('流量与下载',['GA4 Site','GA4 Channels','GA4 Landing Pages','GA4 Business Events','GA4 Events','GSC Site','GSC Pages','GSC Queries','Clarity Snapshots','Clarity Pages','Manual Results']),
         ('技术 SEO',['Technical Findings','Technical Checks','URL Inspection','SF Pages','SF Hreflang Issues','Sitemap URLs','Sitemap Sources','Sitemap Crawl Comparison','Sitemap History','Technical History']),
         ('数据质量',['Data Status','Run Status','GA4 Data Quality','Page Register Checks','Check Coverage','Period Status','Import Batches','Data Revisions']),
-        ('系统与用量',['AI Usage','Storage Status','Archive Config','Clarity Requests','AI Cache']),
+        ('系统与用量',['AI Usage','AI Run Usage','API Usage','Storage Status','Archive Config','Clarity Requests','AI Cache']),
     ]
     entries={}
     for book in (store,report):

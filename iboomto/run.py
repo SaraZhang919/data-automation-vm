@@ -34,6 +34,14 @@ def main():
     if args.no_ai:os.environ.pop('OPENAI_API_KEY',None)
     now=datetime.now(timezone.utc);today=now.astimezone(ZoneInfo('Asia/Tokyo')).date()
     run_id=os.environ.get('GITHUB_RUN_ID',digest([stamp(),args.mode]));statuses=[];findings=[];checked=set();refreshed_periods=set()
+    from .api_usage import METER
+    METER.reset(run_id)
+    # Retain a local quota audit even if collection aborts before the final Sheets write.
+    import atexit
+    def save_api_audit():
+        path=Path('runtime/api-usage.json');path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(json.dumps({'run_id':run_id,'api_usage':METER.rows()},ensure_ascii=False),encoding='utf-8')
+    atexit.register(save_api_audit)
     session=google_session();store=Sheets(session,os.environ.get('IBOOMTO_SHEET_ID',DATA_ID),args.write)
     report_id=os.environ.get('IBOOMTO_REPORT_SHEET_ID')
     report=Sheets(session,report_id,args.write) if report_id else None
@@ -202,7 +210,9 @@ def main():
     elif args.mode!='manual':task('Report',lambda:{'status':'not_configured','detail':'IBOOMTO_REPORT_SHEET_ID missing'})
     store.flush()
     output=Path(args.output);output.parent.mkdir(parents=True,exist_ok=True)
-    output.write_text(json.dumps({'run_id':run_id,'mode':args.mode,'statuses':statuses,'tables':{k:len(v) for k,v in store.cache.items()}},ensure_ascii=False,indent=2),encoding='utf-8')
+    api_usage=METER.rows()
+    output.write_text(json.dumps({'run_id':run_id,'mode':args.mode,'statuses':statuses,'api_usage':api_usage,'tables':{k:len(v) for k,v in store.cache.items()}},ensure_ascii=False,indent=2),encoding='utf-8')
+    store.upsert('API Usage',api_usage);store.flush()
     if any(s['status']=='failed' for s in statuses):sys.exit(1)
 
 if __name__=='__main__':main()

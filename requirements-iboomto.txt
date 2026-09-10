@@ -3,3 +3,4 @@ google-auth==2.57.1
 beautifulsoup4==4.15.0
 tzdata==2026.3
 
+tiktoken==0.14.0

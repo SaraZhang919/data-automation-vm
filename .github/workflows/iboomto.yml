@@ -95,5 +95,12 @@ jobs:
                   for s in d['statuses']:
                       f.write(f"- {s['source']}: {s['status']}\n")
                   f.write('\n[Daily Report](https://docs.google.com/spreadsheets/d/15jBCSt2FqujGjm-L8-PFZTpkMCSDtJVKDl1rEANNNKU/edit)\n')
+          p = Path('runtime/api-usage.json')
+          if p.exists():
+              rows = json.loads(p.read_text())['api_usage']
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+                  f.write('\nGoogle API usage (this run):\n')
+                  for r in rows:
+                      f.write(f"- {r['api']} {r['operation']}: {r['requests']} requests, {r['http_429']} HTTP 429, {r['retry_attempts']} retries; {r['status']}\n")
           PY
 

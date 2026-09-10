@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 from urllib.parse import urlsplit,urlunsplit
 
-SCHEMA='iboomto-analysis-v4'
+SCHEMA='iboomto-analysis-v5'
 DROP={'id','record_id','property','dimensions','metadata','scope','scope_version','collected_at','checked_at',
       'observed_at','updated_at','generated_at','started_at','finished_at','run_id','source_link','inspection_link',
       'first_seen','last_seen','resolved_at','priority_reason','hostname_filter','raw_hashes','folder','batch'}
@@ -34,6 +34,8 @@ def table(rows):
     return {'count':len(rows),'common':common,'columns':columns,'rows':[[r.get(k) for k in columns] for r in rows]}
 
 def comparison_summary(rows):
+    from .evidence_selection import latest_comparisons
+    rows=latest_comparisons(rows)
     available=[];missing=defaultdict(lambda:{'row_count':0,'languages':set(),'metrics':set()})
     fields=('source','period','comparison','current_start','current_end','baseline_start','baseline_end','reason')
     for r in rows:
@@ -63,9 +65,12 @@ def clarity_summary(rows,period,pages=None):
 
 def compact_evidence(payload):
     if payload.get('_compact_schema'):return payload
-    details={}
+    details={};query_summaries=[]
     for name,rows in payload.get('detail_summaries',{}).items():
         if name=='tracking_checks':continue # Business-event rows already carry the same status.
+        if name=='GSC Queries':
+            from .evidence_selection import query_evidence
+            query_summaries,rows=query_evidence(rows,payload.get('report_period'))
         details[name]=table(rows)
     # Business Events contains exact event counts and deduplicated users; do not double count its copy in GA4 Events.
     if details.get('GA4 Business Events',{}).get('count'):details.pop('GA4 Events',None)
@@ -76,7 +81,9 @@ def compact_evidence(payload):
             'data_status':table([r for r in payload.get('data_status',[]) if 'Report' not in r.get('source','')]),
             'coverage':clean(payload.get('historical_coverage',[])),
             'site_metrics':table(payload.get('latest_metrics',[])),
-            'details':details,'comparisons':comparison_summary(payload.get('comparisons',[])),
+            'details':details,'query_summary':table(query_summaries),
+            'query_policy':'Summary covers the full selected union, not all site queries. Category counts overlap. Daily details: up to 5 per category, deduplicated, plus all explicit alerts or growth >=100 daily impressions and >=200%; weekly/monthly include the selected union. Missing baselines are unknown. New-in-pool does not mean first ever.',
+            'comparisons':comparison_summary(payload.get('comparisons',[])),
             'issues':table([{**r,'issue_id':r.get('id','')} for r in payload.get('issues',[])]),'event_mapping':table(payload.get('event_mapping',[])),
             'ga_data_quality':table([r for r in quality if r.get('end')==newest]),
             'sf_batches':table(payload.get('sf_batches',[])),

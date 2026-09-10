@@ -21,7 +21,8 @@ class Analytics:
 
     def ga_timezone(self, pid):
         if pid not in self.timezones:
-            _,meta=self.ga(pid,LAUNCH,'yesterday',[],['sessions'])
+            # Timezone metadata does not require scanning every day since launch.
+            _,meta=self.ga(pid,'yesterday','yesterday',[],['sessions'])
             if not meta.get('timeZone'):raise ApiFailure('GA timezone unavailable')
             self.timezones[pid]=meta['timeZone']
         return self.timezones[pid]

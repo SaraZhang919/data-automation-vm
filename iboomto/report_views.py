@@ -33,6 +33,8 @@ def generate(store,report,statuses,issues,run_id,report_date,kind='daily',questi
     prior=next((r for r in history if r.get('id')==rid and r.get('ai_status')=='success'),None)
     state='success';cached=bool(prior and not force)
     if cached:
+        from .llm_usage import cached_run
+        cached_run(report,kind)
         analysis={k:prior.get(k,[] if k!='summary' else '') for k in ('summary','findings','actions','deep_analysis_candidates','limitations')}
         for k,v in list(analysis.items()):
             if k!='summary' and isinstance(v,str):

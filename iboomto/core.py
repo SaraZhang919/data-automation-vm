@@ -14,7 +14,7 @@ SF_FOLDER = "1QKOgh4aFtVM1CQqaqdwlVSklq8s4LiND"
 PARENT_FOLDER = "1Gqfn-YHyK5v7JimX-EZHHxYcICeRhc_C"
 LANGS = ("en", "ar", "ja", "zh-tw", "es", "de", "fr", "it", "pt")
 MODEL = "gpt-5.6-sol"
-PROMPT_VERSION = "iboomto-2026-09-v3"
+PROMPT_VERSION = "iboomto-2026-09-v4"
 RULE_VERSION = "launch-v1"
 
 def stamp():

@@ -13,6 +13,9 @@ def request(session, method, url, **kwargs):
     global _last_sheet_write
     timeout=kwargs.pop('timeout',60)
     for attempt in range(4):
+        if attempt:
+            from .api_usage import METER,category
+            with METER.lock:METER.retries[category(method,url,kwargs.get('json'))]+=1
         if method!='GET' and 'sheets.googleapis.com/' in url:
             time.sleep(max(0,1.15-(time.monotonic()-_last_sheet_write)))
             _last_sheet_write=time.monotonic()
@@ -45,7 +48,19 @@ def google_session(archive=False):
         creds = Credentials.from_service_account_file(path, scopes=scopes)
     expected = "gsc-api-service@gsc-api-project-453403.iam.gserviceaccount.com"
     if creds.service_account_email != expected: raise ApiFailure("Unexpected Google service account")
-    return AuthorizedSession(creds,refresh_timeout=20)
+    from .api_usage import METER,category
+    class ObservedSession(AuthorizedSession):
+        def request(self,method,url,**kwargs):
+            key=category(method,url,kwargs.get('json'));METER.pace(key)
+            started=time.monotonic();status=0;quota={}
+            try:
+                result=super().request(method,url,**kwargs);status=result.status_code
+                if key[0]=='GA4' and status==200:
+                    try:quota=result.json().get('propertyQuota',{})
+                    except (ValueError,AttributeError):pass
+                return result
+            finally:METER.record(key,status,time.monotonic()-started,quota)
+    return ObservedSession(creds,refresh_timeout=20)
 
 def col(n):
     out = ""
