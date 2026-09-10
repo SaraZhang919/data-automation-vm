@@ -1,6 +1,6 @@
 """Comparisons never fill missing baselines with zero or mix reporting periods."""
 from datetime import date,timedelta
-from .core import LAUNCH, RULE_VERSION, digest, count_alert, issue
+from .core import LAUNCH, RULE_VERSION, digest, count_alert, issue, gsc_final_row
 
 SPECS={'GA4 Site':['sessions','activeUsers','engagementRate'], 'GSC Site':['clicks','impressions','ctr'],
        'GA4 Business Events':['event_count','converting_users','user_conversion_rate'],
@@ -23,6 +23,7 @@ def compare(store):
     for tab,metrics in SPECS.items():
         groups={}
         for r in store.read(tab):
+            if tab.startswith('GSC ') and not gsc_final_row(r):continue
             if r.get('period') not in ('daily','weekly','monthly'):continue
             if not r.get('start') or not r.get('end'):continue
             k=(r.get('language',''),str(r.get('property','')),r.get('period'),r.get('channel',''),r.get('page_url',''),r.get('action',''),r.get('scope',''))

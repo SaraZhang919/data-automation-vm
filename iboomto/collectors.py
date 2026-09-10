@@ -132,14 +132,21 @@ def collect_business_events(api,store,prop,start,end,now,period='daily'):
 
 def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix='',manual=False):
     if end<LAUNCH:return {'rows':0,'status':'prelaunch'}
-    qstart=max(start,LAUNCH);pages=registry(store)
+    qstart=max(start,LAUNCH);requested_end=end
     # Probe beyond launch to recover Google's actual publication boundary, even before any launch-day final rows exist.
     _,meta,_=api.gsc(qstart-timedelta(days=7),end,['date'],'all','all')
     finals,_,_=api.gsc(qstart-timedelta(days=7),end,['date'],'all','final')
     incomplete=meta.get('firstIncompleteDate') or meta.get('first_incomplete_date')
     through=max((r['date'] for r in finals),default='')
-    if incomplete:through=max(through,str(day(incomplete)-timedelta(days=1)))
-    state='all' if period=='daily' else 'final';scoped=scope(exact,prefix);total=0
+    if incomplete:through=str(min(end,day(incomplete)-timedelta(days=1)))
+    if period=='daily':
+        if not through or day(through)<qstart:
+            return {'rows':0,'status':'waiting_for_final_data','final_through':through,
+                    'first_incomplete_date':incomplete or '', 'requested_end':str(requested_end),
+                    'detail':'No finalized launch-day data in the requested window; preview rows are not collected.'}
+        end=min(end,day(through))
+    pages=registry(store)
+    state='final';scoped=scope(exact,prefix);total=0
     for lg in (LANGS+('all',) if lang=='all' else (lang,)):
         for suffix,dimensions in [('Daily',[]),('Pages',['page']),('Queries',['query'])]:
             if lg=='all' and dimensions:continue
@@ -165,6 +172,7 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
                 rows,info,capped=api.gsc(qstart,end,dims,lg,state,exact,prefix,limit=TOP_QUERIES if suffix=='Queries' else None)
             packed=[]
             def quality(d):
+                if not through or str(d)>through:return 'provisional'
                 if capped:return 'limited'
                 if start<LAUNCH and period!='daily':return 'partial_launch'
                 return 'final' if through and str(d)<=through else 'provisional'
@@ -174,7 +182,7 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
                 rec={'source':'GSC','language':lg,'period':period,'start':rs,'end':d,'timezone':'America/Los_Angeles','quality':quality(d),
                      'data_status':'returned','dimensions':json.dumps(dim,sort_keys=True),**row,'collected_at':stamp(),'scope':scoped,
                      'aggregation':info.get('responseAggregationType','unknown'),'coverage':'selected_rows_not_exhaustive' if dimensions else 'api_aggregate',
-                     'final_through':through,'first_incomplete_date':incomplete or ''}
+                     'final_through':through,'first_incomplete_date':incomplete or '', 'data_state':'final'}
                 if suffix=='Pages':rec.update(page_fields(dim['page'],pages));rec.update(original_url=dim['page'],selection_reason=selected.get(pure_url(dim['page']),'selected'))
                 if suffix=='Queries':rec.update(query=dim['query'],selection_reason='top100_clicks')
                 rec['id']=digest(['GSC',lg,period,rs,d,rec['dimensions'],scoped,suffix]);packed.append(rec)
@@ -187,7 +195,7 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
                         packed.append({'id':digest(['GSC',lg,period,rs,str(d),dim,scoped,suffix]),'source':'GSC','language':lg,'period':period,
                             'start':rs,'end':str(d),'timezone':'America/Los_Angeles','quality':quality(d),'data_status':'no_data_returned',
                             'dimensions':dim,**page_fields(u,pages),'original_url':u,'selection_reason':reason,'scope':scoped,
-                            'final_through':through,'first_incomplete_date':incomplete or '','collected_at':stamp(),'aggregation':'byPage'})
+                            'final_through':through,'first_incomplete_date':incomplete or '','collected_at':stamp(),'aggregation':'byPage','data_state':'final'})
             tab='Manual Results' if manual else table('GSC',suffix)
             if manual:
                 for r in packed:r['view']=suffix
@@ -200,4 +208,5 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
                     and (r.get('quality')!='final' or bool(through) and r.get('end','')<=through) and (not manual or r.get('view')==suffix))
             save(store,tab,packed,partition,('clicks','impressions','ctr','position'));total+=len(packed)
     return {'rows':total,'final_through':through,'first_incomplete_date':incomplete or '',
+            'requested_end':str(requested_end),'collected_start':str(qstart),'collected_end':str(end),'data_state':'final',
             'status':'partial_launch' if start<LAUNCH and through>=str(end) else 'final' if through>=str(end) else 'pending'}

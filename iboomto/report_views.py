@@ -11,10 +11,11 @@ def generate(store,report,statuses,issues,run_id,report_date,kind='daily',questi
     from .reporting import evidence,ai_analyse
     payload=evidence(store,statuses,issues,kind)
     if kind=='deep':
-        from .core import select_url
+        from .core import select_url,gsc_final_row
         selection=selection or {};history=[]
         for tab in ('GA4 Site','GA4 Channels','GA4 Landing Pages','GA4 Events','GA4 Business Events','GSC Site','GSC Pages','GSC Queries'):
             for r in store.read(tab):
+                if tab.startswith('GSC ') and not gsc_final_row(r):continue
                 if selection.get('start') and r.get('end','')<selection['start']:continue
                 if selection.get('end') and r.get('start','')>selection['end']:continue
                 if selection.get('language','all')!='all' and r.get('language')!=selection['language']:continue

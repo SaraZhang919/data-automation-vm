@@ -60,10 +60,12 @@ def reconcile_issues(report,findings,checked,store=None):
     return list(old.values())
 
 def evidence(store,statuses,issues,kind='daily'):
+    from .core import gsc_final_row
     period='weekly' if kind.startswith('weekly') else 'monthly' if kind=='monthly' else 'daily'
     latest=[];coverage=[];details={}
     for tab in ('GA4 Site','GSC Site','GA4 Business Events','GA4 Channels','GA4 Landing Pages','GA4 Events','GSC Pages','GSC Queries'):
         rows=[r for r in store.read(tab) if r.get('period','daily')==period]
+        if tab.startswith('GSC '):rows=[r for r in rows if gsc_final_row(r)]
         dates={}
         for r in rows:
             lg=r.get('language','');dates[lg]=max(dates.get(lg,''),r['end'])
@@ -87,7 +89,7 @@ def evidence(store,statuses,issues,kind='daily'):
             'Channel rows may not sum to the API total. Preserve total and flag discrepancy; cause unverified.',
             'Users across properties, days, or pages are not globally additive. Weekly/monthly users come from full-period API queries.',
             'No event row means waiting for data, not proven zero downloads. software_download measures click intent, not completed installation.',
-            'GSC provisional data may be revised; selected pages and Top100 queries are not full site totals.',
+            'GSC analysis uses finalized data only; historical preview rows are excluded. Selected pages and Top100 queries are not full site totals.',
             'Clarity uses rolling windows. SF is a dated snapshot. GA mature is a 48-hour policy, not a provider guarantee.']}
 
 

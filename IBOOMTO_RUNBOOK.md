@@ -5,7 +5,7 @@ Approved migration: 2026-09-09. Source data and Google Sheets calculations use P
 ## Outputs
 
 - [IBT - Website Data](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit)
-- [使用指南 Guide](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit#gid=1208128487): automatically refreshed descriptions, definitions, scopes, schedules and current tab links.
+- [使用指南 Guide](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit#gid=1208128487): user-owned descriptions, definitions, scopes, schedules and tab links. Routine jobs preserve this guide; explicit documentation edits are applied only to selected cells.
 - [Daily / Weekly / Monthly Reports](https://docs.google.com/spreadsheets/d/15jBCSt2FqujGjm-L8-PFZTpkMCSDtJVKDl1rEANNNKU/edit)
 - [Screaming Frog raw uploads](https://drive.google.com/drive/folders/1QKOgh4aFtVM1CQqaqdwlVSklq8s4LiND): YYYYMMDD subfolders with internal_all.csv, inlinks.csv, hreflang_all.csv. Running the desktop crawl remains manual.
 
@@ -25,7 +25,7 @@ To reproduce a result in GA, choose the same language property, use the same sou
 | GA revision + GSC weekly report | Tuesday 17:00, then pending retries | Same weekly period, sources independently marked |
 | Calendar month report | Fourth day 16:00 | Previous natural month, with pending daily retries |
 
-GitHub scheduling may queue. Reports run after collection. GA maturity means 48 hours after period close, not a provider guarantee. GSC uses final publication metadata, accepting both firstIncompleteDate and first_incomplete_date; all-state preview rows are visibly provisional. First launch week/month are partial. Weekly/monthly users come from whole-period API queries, never daily sums.
+GitHub scheduling may queue. Reports run after collection. GA maturity means 48 hours after period close, not a provider guarantee. GSC uses final publication metadata, accepting both firstIncompleteDate and first_incomplete_date. Daily GSC acquisition ends at the confirmed completed date and uses dataState=final for site, page and query metrics. The all-state date probe is used only to discover the publication boundary. If no launch-day final data is available, the run reports waiting_for_final_data. Historical preview rows remain stored but cannot drive current reports, comparisons or deep analysis. First launch week/month are partial. Weekly/monthly users come from whole-period API queries, never daily sums.
 
 ## Tables and selection
 

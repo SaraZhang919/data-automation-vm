@@ -63,6 +63,12 @@ def daily_window(now, tz):
     end = now.astimezone(ZoneInfo(tz)).date() - timedelta(days=1)
     return max(LAUNCH, end-timedelta(days=6)), end
 
+def gsc_final_row(row):
+    """Legacy preview rows stay in storage but must not drive current reports."""
+    if row.get('quality')=='provisional':return False
+    if row.get('quality')=='final':return True
+    return bool(row.get('end') and row.get('final_through') and row['end']<=row['final_through'])
+
 def previous_week(ref):
     end = ref - timedelta(days=(ref.weekday()-5) % 7 or 7)
     return end-timedelta(days=6), end

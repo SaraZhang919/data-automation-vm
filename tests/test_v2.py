@@ -13,6 +13,7 @@ class MigrationTests(unittest.TestCase):
         s=MemoryStore();api=Mock()
         def gsc(start,end,dims,*args,**kwargs):
             if dims==['query']:return [{'query':'example','clicks':2,'impressions':20,'ctr':.1,'position':4}],{},False
+            if dims==['date']:return [],{'firstIncompleteDate':'2026-09-08'},False
             return [],{},False
         api.gsc.side_effect=gsc
         collect_gsc(api,s,date(2026,9,7),date(2026,9,7),lang='en')
@@ -63,7 +64,35 @@ class MigrationTests(unittest.TestCase):
         api.gsc.side_effect=gsc
         r=collect_gsc(api,s,date(2026,9,7),date(2026,9,8))
         self.assertEqual(r['final_through'],'2026-09-06')
-        row=s.read('GSC Site')[0];self.assertEqual(row['quality'],'provisional');self.assertEqual(row['aggregation'],'byProperty')
+        self.assertEqual(r['status'],'waiting_for_final_data')
+        self.assertFalse(s.read('GSC Site'))
+        self.assertEqual(len(api.gsc.call_args_list),2)
+
+    def test_daily_gsc_caps_all_details_at_confirmed_final_date(self):
+        s=MemoryStore();api=Mock()
+        s.set('Page name - manual management',[{'Urls':'https://www.iboomto.com/','Lan':'EN'}])
+        def gsc(start,end,dims,lang='all',state='final',*args,**kwargs):
+            if start<date(2026,9,7):
+                return ([{'date':'2026-09-07'}] if state=='final' else []),{'first_incomplete_date':'2026-09-08'},False
+            self.assertEqual(state,'final');self.assertLessEqual(end,date(2026,9,7))
+            if dims==['date']:return [{'date':'2026-09-07','clicks':2,'impressions':10,'ctr':.2,'position':2}],{'responseAggregationType':'byPage'},False
+            return [],{},False
+        api.gsc.side_effect=gsc
+        result=collect_gsc(api,s,date(2026,9,7),date(2026,9,9),lang='en')
+        self.assertEqual(result['collected_end'],'2026-09-07')
+        self.assertEqual(result['requested_end'],'2026-09-09')
+        self.assertTrue(all(r['quality']=='final' and r['end']=='2026-09-07' for r in s.read('GSC Site')+s.read('GSC Pages')))
+
+    def test_legacy_gsc_preview_never_supersedes_final_in_reports_or_comparisons(self):
+        from iboomto.reporting import evidence
+        s=MemoryStore();initialise_config(s)
+        s.set('GSC Site',[{'id':str(d),'source':'GSC','language':'en','period':'daily','start':f'2026-09-{d:02}','end':f'2026-09-{d:02}',
+                          'quality':'final' if d==7 else 'provisional','clicks':d,'impressions':100,'ctr':d/100} for d in (7,8,9)])
+        metric_findings(s)
+        self.assertTrue(all(r['current_end']=='2026-09-07' for r in s.read('Comparisons')))
+        payload=evidence(s,[],[])
+        self.assertEqual([r['end'] for r in payload['latest_metrics']],['2026-09-07'])
+        self.assertEqual(len(s.read('GSC Site')),3)
 
     def test_event_period_users_queried_not_summed(self):
         s=MemoryStore();initialise_config(s);s.set('GA4 Site',[{'property':'123','period':'weekly','end':'2026-09-19','totalUsers':10}])
