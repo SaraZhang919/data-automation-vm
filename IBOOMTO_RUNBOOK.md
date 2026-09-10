@@ -77,3 +77,12 @@ Clarity now makes one unsegmented request on Tuesday at 17:00 JST, numOfDays=3, 
 Reference: https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api
 
 Actions mode report-only regenerates analysis from existing stored facts without rerunning source APIs. It is suitable after enabling LLM or refining report formatting.
+# Workbook preservation update — 2026-09-10
+
+- Existing Guide tabs are user-owned, including case variants such as `使用指南guide`. Scheduled jobs never rebuild them. Edit specific guide cells only for an explicit documentation update, preserving notes and layout.
+- Existing data tabs retain their current column order, widths, row heights, hidden state, frozen panes and number formats. Routine writes update values; new fields append, and new rows inherit the preceding data row's format. Automated result rows are still refreshed by their data partition; use the manual guide/register for annotations.
+- `subfolder` is omitted from GA4 Landing Pages and GSC Pages. Other page metadata and the collection scope remain unchanged.
+- Count metrics use integer display (`#,##0`); engagement rate and CTR remain percentages. `averageSessionDuration` remains seconds, and position retains decimals.
+- Landing-page selection ranks `activeUsers` under **session** Organic Search, then requests **all-channel** metrics for the selected pages. No First user channel filter is applied.
+- Daily query ranking requests one day with the `query` dimension alone so the API's click ordering applies; the known date is attached locally. Candidate expansion beyond Top100 is not enabled.
+- The event collection cadence, Clarity weekly cadence, seven-day backfill and LLM evidence scope have not changed in this update. Proposals to change them require a separate implementation decision.

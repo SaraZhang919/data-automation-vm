@@ -86,12 +86,16 @@ class Sheets:
         return self.cache[name]
 
     def set(self, name, rows, headers=None):
-        if name in ('Properties','Page name - manual management','Site Event Logs - Manual'): raise ValueError("User configuration is read only")
+        if name in ('Properties','Page name - manual management','Site Event Logs - Manual') or name in self.tabs and name.lower().endswith('guide'):
+            raise ValueError("User configuration/guide is read only during routine runs")
         self.read(name)
         head=list(headers or self.headers[name])
         for row in rows:
             for k in row:
                 if k not in head: head.append(k)
+        if name in self.tabs and self.headers[name]:
+            # Preserve existing column positions; new fields append to the right.
+            head=list(self.headers[name])+[k for k in head if k not in self.headers[name]]
         if rows==self.cache[name] and head==self.headers[name]:return
         self.cache[name]=rows; self.headers[name]=head; self.dirty.add(name)
 
@@ -115,9 +119,6 @@ class Sheets:
                 edits.append({"addSheet":{"properties":{"title":name,"gridProperties":{"rowCount":needed,"columnCount":max(26,len(head)),"frozenRowCount":1}}}})
             else:
                 p=self.tabs[name]
-                if name.endswith('Guide'):
-                    # Legacy guides merged each whole row, which discards the new detail columns.
-                    edits.append({'unmergeCells':{'range':{'sheetId':p['sheetId']}}})
                 edits.append({"updateSheetProperties":{"properties":{"sheetId":p['sheetId'],"gridProperties":{"rowCount":max(needed,p['gridProperties']['rowCount']),"columnCount":max(len(head),p['gridProperties']['columnCount'])}},"fields":"gridProperties.rowCount,gridProperties.columnCount"}})
         result=request(self.s,'POST',self.base+':batchUpdate',json={'requests':edits}).json()
         for reply in result.get('replies',[]):
@@ -132,8 +133,9 @@ class Sheets:
         for name in names:
             rows=self.cache[name];head=self.headers[name]
             from .layout import ordered_headers
-            head=ordered_headers(name,head);self.headers[name]=head
             prior=getattr(self,'original',{}).get(name,[])
+            if not prior:head=ordered_headers(name,head)
+            self.headers[name]=head
             width=max(len(head),len(prior[0]) if prior else 0)
             if name.endswith('Guide'):
                 # Legacy guide rows can have trailing content beyond their short header.
@@ -150,13 +152,13 @@ class Sheets:
                 while end<len(matrix) and end-start<500 and (end>=len(prior) or normalized(prior[end])!=matrix[end]):end+=1
                 writes.append({'range':f"'{name}'!A{start+1}",'values':matrix[start:end]});start=end
             sid=self.tabs[name]['sheetId']
-            if prior and prior[0]!=head:
-                # Move the user's hidden-column preference with the field when reordering headers.
-                column_meta=request(self.s,'GET',self.base,params={'ranges':f"'{name}'!A1:{col(width)}1",'includeGridData':'true','fields':'sheets(data(columnMetadata(hiddenByUser)))'}).json()
-                old_columns=column_meta.get('sheets',[{}])[0].get('data',[{}])[0].get('columnMetadata',[])
-                hidden={key:old_columns[i].get('hiddenByUser',False) if i<len(old_columns) else False for i,key in enumerate(prior[0])}
-                for i,key in enumerate(head):
-                    formats.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':i,'endIndex':i+1},'properties':{'hiddenByUser':hidden.get(key,False)},'fields':'hiddenByUser'}})
+            if prior:
+                # Existing sheets are values-only: widths, hidden flags, freeze panes,
+                # number formats, notes and guide annotations belong to the user.
+                if len(rows)+1>len(prior) and len(prior)>1:
+                    formats.append({'copyPaste':{'source':{'sheetId':sid,'startRowIndex':len(prior)-1,'endRowIndex':len(prior),'startColumnIndex':0,'endColumnIndex':len(prior[0])},
+                        'destination':{'sheetId':sid,'startRowIndex':len(prior),'endRowIndex':len(rows)+1,'startColumnIndex':0,'endColumnIndex':len(prior[0])},'pasteType':'PASTE_FORMAT'}})
+                continue
             formats.extend([
                 {"repeatCell":{"range":{"sheetId":sid,"startRowIndex":0,"endRowIndex":1},"cell":{"userEnteredFormat":{"backgroundColor":{"red":.10,"green":.20,"blue":.30},"textFormat":{"bold":True,"foregroundColor":{"red":1,"green":1,"blue":1}},"wrapStrategy":"WRAP"}},"fields":"userEnteredFormat"}},
                 {"updateSheetProperties":{"properties":{"sheetId":sid,"gridProperties":{"frozenRowCount":1}},"fields":"gridProperties.frozenRowCount"}}
@@ -189,7 +191,7 @@ class Sheets:
                 request(self.s,'POST',self.base+'/values:batchUpdate',json={'valueInputOption':'RAW','data':batch});batch=[];size=0
             batch.append(write);size+=n
         if batch:request(self.s,'POST',self.base+'/values:batchUpdate',json={'valueInputOption':'RAW','data':batch})
-        request(self.s,'POST',self.base+':batchUpdate',json={'requests':formats})
+        if formats:request(self.s,'POST',self.base+':batchUpdate',json={'requests':formats})
         for name in names:
             rows=self.cache[name]
             self.old_sizes[name]=len(rows)+1

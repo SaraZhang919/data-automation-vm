@@ -52,6 +52,8 @@ DESCRIPTIONS={
 }
 
 def update_guide(store,report=None):
+    # Once created, guides are user-owned. Routine jobs must not rebuild notes or layout.
+    if any(n.lower().endswith('guide') for n in store.tabs):return
     name=next((n for n in store.tabs if n!='Guide' and n.endswith('Guide')),'Guide')
     rows=[]
     topics=[
@@ -85,7 +87,7 @@ def update_guide(store,report=None):
         if not book:continue
         names=set(book.tabs)|set(book.dirty)
         for tab_name in sorted(names):
-            if tab_name.endswith('Guide'):continue
+            if tab_name.lower().endswith('guide'):continue
             category,detail=DESCRIPTIONS.get(tab_name,('系统记录','自动化内部记录；请勿改名或删除表头。'))
             entries[tab_name]=(detail,book.link(tab_name))
     links={}

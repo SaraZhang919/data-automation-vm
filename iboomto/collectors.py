@@ -28,6 +28,8 @@ def previous_range(start,end,period):
 
 def save(store,tab,packed,partition,metrics):
     from .analytics import metric_changed
+    if tab in ('GA4 Landing Pages','GSC Pages'):
+        for row in packed:row.pop('subfolder',None)
     old={r.get('id'):r for r in store.read(tab)};revisions=[]
     for r in packed:
         before=old.get(r['id'])
@@ -156,7 +158,9 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
             elif suffix=='Queries' and period=='daily':
                 # Per-day Top100: never request an unbounded date x query history.
                 for d in days(qstart,end):
-                    batch,info,cap=api.gsc(d,d,dims,lg,state,exact,prefix,limit=TOP_QUERIES);rows+=batch;capped|=cap
+                    # Without the date dimension GSC sorts by clicks, not date/tied arbitrary order.
+                    batch,info,cap=api.gsc(d,d,['query'],lg,state,exact,prefix,limit=TOP_QUERIES)
+                    rows.extend({**r,'date':str(d)} for r in batch);capped|=cap
             else:
                 rows,info,capped=api.gsc(qstart,end,dims,lg,state,exact,prefix,limit=TOP_QUERIES if suffix=='Queries' else None)
             packed=[]

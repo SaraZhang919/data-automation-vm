@@ -2,6 +2,8 @@
 FRONT=['period','start','end','language','channel','event_name','subfolder','page_type','page_name','page_url','query','selection_reason','data_status','quality']
 PERCENT={'ctr','engagementRate','user_conversion_rate','change_ratio','change_pct','yellow_pct','red_pct','yellow_relative','red_relative'}
 TECH={'id','dimensions','metadata','scope','property','scope_version'}
+COUNTS={'sessions','engagedSessions','activeUsers','totalUsers','newUsers','keyEvents','eventCount','clicks','impressions',
+        'event_count','converting_users','eligible_users','api_sessions','channel_rows_sum'}
 
 def ordered_headers(name,head):
     if name.startswith(('GA4 ','GSC ')) and name not in ('GA4 Reconciliation',):
@@ -16,7 +18,8 @@ def format_columns(sid,name,head,count,new_layout):
     for i,key in enumerate(head):
         rg={'sheetId':sid,'startRowIndex':1,'endRowIndex':max(2,count+1),'startColumnIndex':i,'endColumnIndex':i+1}
         fmt=None
-        if key in PERCENT or key.endswith('_session_rate') or key=='average_scroll_depth':fmt={'type':'PERCENT','pattern':'0.00%'}
+        if key in COUNTS:fmt={'type':'NUMBER','pattern':'#,##0'}
+        elif key in PERCENT or key.endswith('_session_rate') or key=='average_scroll_depth':fmt={'type':'PERCENT','pattern':'0.00%'}
         elif key in ('change_pp','drop_percentage_points'):fmt={'type':'NUMBER','pattern':'0.00" pp"'}
         elif key in ('key_events_per_user','position','averageSessionDuration'):fmt={'type':'NUMBER','pattern':'0.00'}
         if fmt:requests.append({'repeatCell':{'range':rg,'cell':{'userEnteredFormat':{'numberFormat':fmt}},'fields':'userEnteredFormat.numberFormat'}})

@@ -9,6 +9,24 @@ from iboomto.maintenance import maintain,expired
 from iboomto.technical import sitemap_collect
 
 class MigrationTests(unittest.TestCase):
+    def test_daily_query_ranking_uses_query_only_then_restores_date(self):
+        s=MemoryStore();api=Mock()
+        def gsc(start,end,dims,*args,**kwargs):
+            if dims==['query']:return [{'query':'example','clicks':2,'impressions':20,'ctr':.1,'position':4}],{},False
+            return [],{},False
+        api.gsc.side_effect=gsc
+        collect_gsc(api,s,date(2026,9,7),date(2026,9,7),lang='en')
+        row=s.read('GSC Queries')[0]
+        self.assertEqual((row['query'],row['start'],row['end']),('example','2026-09-07','2026-09-07'))
+        self.assertFalse(any(call.args[2]==['date','query'] for call in api.gsc.call_args_list))
+
+    def test_removed_subfolder_does_not_return_to_page_sheets(self):
+        from iboomto.collectors import save
+        s=MemoryStore()
+        for tab in ('GA4 Landing Pages','GSC Pages'):
+            save(s,tab,[{'id':'p','subfolder':'tools','page_url':'https://www.iboomto.com/tools'}],lambda r:True,[])
+            self.assertNotIn('subfolder',s.read(tab)[0])
+
     def test_unapproved_ai_evidence_never_leaves_process(self):
         from iboomto.reporting import ai_analyse
         from iboomto.storage import ApiFailure
