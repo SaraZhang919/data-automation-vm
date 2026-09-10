@@ -80,7 +80,8 @@ class Sheets:
             if len(chunk)<end-start+1: break
         head=values[0] if values else []
         self.headers[name]=head
-        self.cache[name]=[dict(zip(head,row)) for row in values[1:] if any(v != "" for v in row)]
+        from .missing_values import internal
+        self.cache[name]=[{k:internal(name,k,v) for k,v in zip(head,row)} for row in values[1:] if any(v != "" for v in row)]
         self.old_sizes[name]=len(values)
         self.original[name]=values
         return self.cache[name]
@@ -140,7 +141,8 @@ class Sheets:
             if name.endswith('Guide'):
                 # Legacy guide rows can have trailing content beyond their short header.
                 width=max(width,max((len(row) for row in prior),default=0))
-            matrix=[head+['']*(width-len(head))]+[[cell(row.get(k,"")) for k in head]+['']*(width-len(head)) for row in rows]
+            from .missing_values import display
+            matrix=[head+['']*(width-len(head))]+[[cell(display(name,k,row.get(k,""))) for k in head]+['']*(width-len(head)) for row in rows]
             if self.old_sizes.get(name,0)>len(matrix):
                 matrix += [[""]*width for _ in range(self.old_sizes[name]-len(matrix))]
             def normalized(row):return row+['']*(width-len(row))
@@ -196,5 +198,5 @@ class Sheets:
             rows=self.cache[name]
             self.old_sizes[name]=len(rows)+1
             if not hasattr(self,'original'):self.original={}
-            self.original[name]=[self.headers[name]]+[[cell(r.get(k,'')) for k in self.headers[name]] for r in rows]
+            self.original[name]=[self.headers[name]]+[[cell(display(name,k,r.get(k,''))) for k in self.headers[name]] for r in rows]
         self.dirty.clear()

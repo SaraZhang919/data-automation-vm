@@ -1,9 +1,9 @@
 """Shared human-readable headers and narrowly scoped formats."""
 FRONT=['period','start','end','language','channel','event_name','subfolder','page_type','page_name','page_url','query','selection_reason','data_status','quality']
-PERCENT={'ctr','engagementRate','user_conversion_rate','change_ratio','change_pct','yellow_pct','red_pct','yellow_relative','red_relative'}
+PERCENT={'ctr','engagementRate','user_conversion_rate','change_ratio','change_pct','yellow_pct','red_pct','yellow_relative','red_relative','impressions_growth_ratio'}
 TECH={'id','dimensions','metadata','scope','property','scope_version'}
 COUNTS={'sessions','engagedSessions','activeUsers','totalUsers','newUsers','keyEvents','eventCount','clicks','impressions',
-        'event_count','converting_users','eligible_users','api_sessions','channel_rows_sum'}
+        'event_count','converting_users','eligible_users','api_sessions','channel_rows_sum','baseline_clicks','baseline_impressions'}
 
 def ordered_headers(name,head):
     if name=='Clarity Pages':

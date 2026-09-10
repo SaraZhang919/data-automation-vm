@@ -130,7 +130,7 @@ def collect_business_events(api,store,prop,start,end,now,period='daily'):
     store.upsert('GA4 Business Events',records)
     return {'status':'success' if rows else 'waiting_for_event_data','rows':len(records),'event_name':'software_download'}
 
-def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix='',manual=False):
+def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix='',manual=False,views=None):
     if end<LAUNCH:return {'rows':0,'status':'prelaunch'}
     qstart=max(start,LAUNCH);requested_end=end
     # Probe beyond launch to recover Google's actual publication boundary, even before any launch-day final rows exist.
@@ -146,9 +146,10 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
                     'detail':'No finalized launch-day data in the requested window; preview rows are not collected.'}
         end=min(end,day(through))
     pages=registry(store)
-    state='final';scoped=scope(exact,prefix);total=0
+    state='final';scoped=scope(exact,prefix);total=0;query_cache={}
     for lg in (LANGS+('all',) if lang=='all' else (lang,)):
         for suffix,dimensions in [('Daily',[]),('Pages',['page']),('Queries',['query'])]:
+            if views is not None and suffix not in views:continue
             if lg=='all' and dimensions:continue
             dims=(['date'] if period=='daily' else [])+dimensions;selected={};capped=False;rows=[];info={}
             if suffix=='Pages':
@@ -162,12 +163,14 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
                 if prefix:selected={u:v for u,v in selected.items() if urlsplit(u).path.startswith(prefix)}
                 for u in selected:
                     batch,info,cap=api.gsc(qstart,end,dims,lg,state,u);rows+=batch;capped|=cap
-            elif suffix=='Queries' and period=='daily':
-                # Per-day Top100: never request an unbounded date x query history.
-                for d in days(qstart,end):
-                    # Without the date dimension GSC sorts by clicks, not date/tied arbitrary order.
-                    batch,info,cap=api.gsc(d,d,['query'],lg,state,exact,prefix,limit=TOP_QUERIES)
-                    rows.extend({**r,'date':str(d)} for r in batch);capped|=cap
+            elif suffix=='Queries':
+                from .query_selection import collect_queries
+                if period=='daily':
+                    for d in days(qstart,end):
+                        batch,info=collect_queries(api,d,d,period,lg,exact,prefix,query_cache)
+                        rows.extend({**r,'date':str(d)} for r in batch)
+                else:
+                    rows,info=collect_queries(api,qstart,end,period,lg,exact,prefix,query_cache)
             else:
                 rows,info,capped=api.gsc(qstart,end,dims,lg,state,exact,prefix,limit=TOP_QUERIES if suffix=='Queries' else None)
             packed=[]
@@ -184,7 +187,7 @@ def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix=''
                      'aggregation':info.get('responseAggregationType','unknown'),'coverage':'selected_rows_not_exhaustive' if dimensions else 'api_aggregate',
                      'final_through':through,'first_incomplete_date':incomplete or '', 'data_state':'final'}
                 if suffix=='Pages':rec.update(page_fields(dim['page'],pages));rec.update(original_url=dim['page'],selection_reason=selected.get(pure_url(dim['page']),'selected'))
-                if suffix=='Queries':rec.update(query=dim['query'],selection_reason='top100_clicks')
+                if suffix=='Queries':rec.update(query=dim['query'],coverage='candidate_pool_union_not_exhaustive')
                 rec['id']=digest(['GSC',lg,period,rs,d,rec['dimensions'],scoped,suffix]);packed.append(rec)
             if suffix=='Pages':
                 present={(r['end'],r['page_url']) for r in packed}

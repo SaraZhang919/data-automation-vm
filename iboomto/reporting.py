@@ -89,7 +89,7 @@ def evidence(store,statuses,issues,kind='daily'):
             'Channel rows may not sum to the API total. Preserve total and flag discrepancy; cause unverified.',
             'Users across properties, days, or pages are not globally additive. Weekly/monthly users come from full-period API queries.',
             'No event row means waiting for data, not proven zero downloads. software_download measures click intent, not completed installation.',
-            'GSC analysis uses finalized data only; historical preview rows are excluded. Selected pages and Top100 queries are not full site totals.',
+            'GSC uses finalized data. Query selection unions clicks Top100, impressions Top100 and up to 50 new/50 growing candidates from a maximum 5000-query pool per language/period. These are not full site totals. New means absent from the comparison pool, not proven first-ever appearance. Missing baselines are not zero.',
             'Clarity uses rolling windows. SF is a dated snapshot. GA mature is a 48-hour policy, not a provider guarantee.']}
 
 
