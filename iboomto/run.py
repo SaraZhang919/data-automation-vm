@@ -142,7 +142,7 @@ def main():
                     return {'status':'partial' if failed else 'success','checked':len(records),'failed':failed}
                 task('URL Inspection',inspect_job)
             if args.source in ('all','clarity'):
-                task('Clarity',lambda:clarity_collect(store,os.environ.get('CLARITY_API_TOKEN'),now))
+                task('Clarity',lambda:clarity_collect(store,os.environ.get('CLARITY_API_TOKEN'),now,api))
             # Period refreshes are source-independent and retry pending periods on daily runs.
             if args.source=='all':
                 start,end=previous_week(today)

@@ -1,4 +1,4 @@
-"""One project-wide snapshot per weekly Clarity request; no URL/device rows."""
+"""Normalize Clarity metrics without inventing missing values."""
 import json
 from .core import digest
 
@@ -12,7 +12,7 @@ def numeric(value):
     except (ValueError,TypeError):return ''
 
 def flatten(metrics,context):
-    row={**context,'scope':'Clarity project all hosts','cadence':'weekly','is_full_calendar_week':False}
+    row={'scope':'Clarity project all hosts','cadence':'weekly',**context,'is_full_calendar_week':False}
     for name,info in metrics.items():
         if name in FRICTION:
             prefix=FRICTION[name]
@@ -23,6 +23,7 @@ def flatten(metrics,context):
         elif name=='Traffic':
             for source,target in [('totalSessionCount','total_sessions'),('totalBotSessionCount','total_bot_sessions'),('distinctUserCount','distinct_users'),('pagesPerSessionPercentage','pages_per_session')]:
                 row[target]=numeric(info.get(source))
+            if row.get('pages_per_session')=='':row['pages_per_session']=numeric(info.get('PagesPerSessionPercentage'))
             if row.get('distinct_users')=='':row['distinct_users']=numeric(info.get('distantUserCount'))
         elif name=='EngagementTime':row.update(active_time=numeric(info.get('activeTime')),total_time=numeric(info.get('totalTime')))
         elif name=='ScrollDepth':

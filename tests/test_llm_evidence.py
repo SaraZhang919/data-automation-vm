@@ -27,23 +27,6 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(row['window_type'],'rolling_24h');self.assertFalse(row['is_full_calendar_week'])
         self.assertNotIn('personal',dumps(payload));self.assertNotIn('10000',dumps(payload))
 
-    def test_other_days_make_no_clarity_request(self):
-        with patch('iboomto.technical.requests.Session') as session:
-            result=clarity_collect(MemoryStore(),'test',datetime(2026,9,9,8,tzinfo=timezone.utc))
-            self.assertEqual(result['status'],'scheduled_weekly');session.assert_not_called()
-
-    def test_tuesday_single_overall_72h_request_and_duplicate_skip(self):
-        store=MemoryStore();response=Mock();response.status_code=200
-        from iboomto.clarity_summary import CORE
-        response.json.return_value=[{'metricName':name,'information':[{'totalSessionCount':'150','subTotal':2,'sessionsWithMetricPercentage':5}]} for name in CORE]
-        session=Mock();session.headers={};session.get.return_value=response
-        with patch('iboomto.technical.requests.Session',return_value=session):
-            first=clarity_collect(store,'test',datetime(2026,9,15,8,tzinfo=timezone.utc))
-            second=clarity_collect(store,'test',datetime(2026,9,15,9,tzinfo=timezone.utc))
-        self.assertEqual(first['status'],'success');self.assertEqual(second['status'],'cached')
-        session.get.assert_called_once();self.assertEqual(session.get.call_args.kwargs['params'],{'numOfDays':3})
-        self.assertEqual(len(store.read('Clarity Snapshots')),1)
-
     def test_columnar_values_quality_and_urls_are_preserved(self):
         p={'report_period':'daily','latest_metrics':[{'language':'en','quality':'provisional','sessions':50,'metadata':{'secret':'x'},'collected_at':'volatile'}],
            'detail_summaries':{'GSC Pages':[{'page_url':'https://www.iboomto.com/a?tracking=private','clicks':3,'quality':'provisional'}]}}

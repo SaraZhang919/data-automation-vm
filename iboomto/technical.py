@@ -202,33 +202,6 @@ def sf_import(session,store,now):
     state='waiting_for_upload' if not latest_time else 'stale' if age>allowed_age else 'success'
     return issues,{'imported':imported,'latest_batch':latest_time,'age_days':age,'status':state}
 
-def clarity_collect(store,token,now):
-    from zoneinfo import ZoneInfo
-    from .clarity_summary import CORE,flatten
-    local=now.astimezone(ZoneInfo('Asia/Tokyo'))
-    # Tuesday daily workflow at 17:00 JST. Other days make no Clarity API call.
-    if local.weekday()!=1:
-        return {'status':'scheduled_weekly','detail':'Tuesday 17:00 JST; latest snapshot remains available'}
-    if not token:return {'status':'not_configured','detail':'CLARITY_API_TOKEN missing'}
-    day=local.date().isoformat();rid=digest(['clarity-weekly-overall-72h',day])
-    ledger=store.read('Clarity Requests')
-    if any(r.get('id')==rid and r.get('status')=='success' for r in ledger):return {'status':'cached','day':day}
-    prior=next((r for r in ledger if r.get('id')==rid),{})
-    if int(prior.get('attempts',0))>=3:return {'status':'retry_limit','detail':'Weekly snapshot failed; inspect request status'}
-    session=requests.Session();session.headers['Authorization']='Bearer '+token
-    response=session.get('https://www.clarity.ms/export-data/api/v1/project-live-insights',params={'numOfDays':3},timeout=60)
-    record={'id':rid,'day':day,'view':'overall','cadence':'weekly','num_of_days':3,'attempts':int(prior.get('attempts',0))+1,'http_status':response.status_code,'at':stamp()}
-    if response.status_code!=200:
-        store.upsert('Clarity Requests',[{**record,'status':'failed'}]);store.flush();raise ApiFailure(f'Clarity HTTP {response.status_code}')
-    metrics={};ambiguous=[]
-    for item in response.json():
-        name=item.get('metricName');items=item.get('information',[])
-        if name not in CORE:continue
-        if len(items)!=1:ambiguous.append(name);continue
-        metrics[name]=items[0]
-    row=flatten(metrics,{'id':rid,'day':day,'window_start':(now-timedelta(hours=72)).isoformat(),'window_end':now.isoformat(),
-                        'window_type':'rolling_72h','timezone':'UTC','coverage':'project_aggregate','collected_at':stamp()})
-    row['ambiguous_metrics']=ambiguous
-    store.upsert('Clarity Snapshots',[row]);store.flush()
-    store.upsert('Clarity Requests',[{**record,'status':'success' if not ambiguous and not row['missing_metrics'] else 'partial'}])
-    return {'status':'partial' if ambiguous or row['missing_metrics'] else 'success','rows':1,'window_type':'rolling_72h','not_full_week':True}
+def clarity_collect(store,token,now,api=None):
+    from .clarity import collect
+    return collect(store,token,now,api)

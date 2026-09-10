@@ -5,7 +5,7 @@ from .core import stamp,digest
 from .storage import request,ApiFailure
 
 def expired(row,tab,today):
-    period=row.get('period','daily');raw=row.get('end') or row.get('revised_at') or row.get('observed_at') or row.get('checked_at') or row.get('finished_at') or ''
+    period=row.get('period','daily');raw=row.get('end') or row.get('revised_at') or row.get('observed_at') or row.get('checked_at') or row.get('finished_at') or row.get('window_end') or row.get('day') or ''
     try:d=date.fromisoformat(str(raw)[:10])
     except ValueError:return False
     if period=='monthly':
@@ -15,7 +15,7 @@ def expired(row,tab,today):
 
 def maintain(store,today):
     eligible=['GA4 Site','GSC Site','GA4 Channels','GA4 Landing Pages','GA4 Events','GA4 Business Events','GSC Pages','GSC Queries',
-              'Sitemap History','Technical History','Data Revisions','Run Status','Clarity Snapshots','Clarity Requests']
+              'Sitemap History','Technical History','Data Revisions','Run Status','Clarity Snapshots','Clarity Pages','Clarity Requests']
     old={tab:[r for r in store.read(tab) if expired(r,tab,today)] for tab in eligible}
     old={tab:rows for tab,rows in old.items() if rows};count=sum(map(len,old.values()))
     cfg=next(iter(store.read('Archive Config')),{});file_id=cfg.get('file_id') or os.environ.get('IBOOMTO_ARCHIVE_FILE_ID')

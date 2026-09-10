@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 from urllib.parse import urlsplit,urlunsplit
 
-SCHEMA='iboomto-analysis-v3'
+SCHEMA='iboomto-analysis-v4'
 DROP={'id','record_id','property','dimensions','metadata','scope','scope_version','collected_at','checked_at',
       'observed_at','updated_at','generated_at','started_at','finished_at','run_id','source_link','inspection_link',
       'first_seen','last_seen','resolved_at','priority_reason','hostname_filter','raw_hashes','folder','batch'}
@@ -44,17 +44,20 @@ def comparison_summary(rows):
     return {'available':table(available),'unavailable_groups':table(groups),
             'note':'Unavailable groups count comparison rows, not affected sessions/pages. Missing baselines are never treated as zero.'}
 
-def clarity_summary(rows,period):
+def clarity_summary(rows,period,pages=None):
     if not rows:return {'status':'unavailable'}
     if any('view' in r for r in rows):
         from .clarity_summary import from_legacy
         rows=from_legacy(rows)
     if not rows:return {'status':'unavailable'}
     latest=max(rows,key=lambda r:r.get('window_end',''))
-    return {'snapshot':clean(latest),'context_only':period!='daily',
-            'notes':['One project-wide aggregate snapshot; no URL/device breakdown, recording or individual event stream.',
-                     'Weekly collection covers the prior 72 hours (API maximum), NOT a full calendar week. Legacy snapshots keep their original 24-hour label.',
+    latest_page_window=max((r.get('window_end','') for r in pages or []),default='')
+    selected_pages=[r for r in pages or [] if r.get('window_end')==latest_page_window]
+    return {'snapshot':clean(latest),'pages':table(selected_pages),'context_only':period!='daily',
+            'notes':['Latest overall snapshot and latest GSC-selected Top20 URL snapshot only; no recordings or individual events.',
+                     'Collection every 48 hours covers the prior 72 hours; windows overlap and must never be summed into weekly/monthly totals. Legacy windows retain their actual labels.',
                      'Clarity project includes all tracked hosts; do not equate it with production-host-filtered GA.',
+                     'GSC Top20 uses clicks over its latest 7 finalized dates across all languages, not the Clarity window. Clarity page behavior covers all channels, not just organic search. API may omit URLs; not_returned is not zero.',
                      'Missing fields remain unknown, not zero. Session rates/scroll depth use fractions (0–1).']}
 
 
@@ -77,7 +80,7 @@ def compact_evidence(payload):
             'issues':table([{**r,'issue_id':r.get('id','')} for r in payload.get('issues',[])]),'event_mapping':table(payload.get('event_mapping',[])),
             'ga_data_quality':table([r for r in quality if r.get('end')==newest]),
             'sf_batches':table(payload.get('sf_batches',[])),
-            'clarity':clarity_summary(payload.get('clarity',[]),payload.get('report_period')),
+            'clarity':clarity_summary(payload.get('clarity',[]),payload.get('report_period'),payload.get('clarity_pages',[])),
             'period_status':table(payload.get('period_status',[])),
             'rules':table([{**r,'rule_name':r.get('id','')} for r in payload.get('rules',[])]),'limitations':payload.get('limitations',[]),
             **({'requested_selection':clean(payload['requested_selection']),

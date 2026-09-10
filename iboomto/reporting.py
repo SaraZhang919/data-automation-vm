@@ -83,7 +83,7 @@ def evidence(store,statuses,issues,kind='daily'):
             'comparisons':[r for r in store.read('Comparisons') if r.get('period')==period], 'detail_summaries':details,
             'issues':[x for x in issues if x.get('state')!='resolved'],'event_mapping':store.read('Event Mapping'),
             'ga_data_quality':[r for r in store.read('GA4 Data Quality') if r.get('period')==period and r.get('status')!='matches'],
-            'sf_batches':store.read('Import Batches')[-3:],'clarity':store.read('Clarity Snapshots'),
+            'sf_batches':store.read('Import Batches')[-3:],'clarity':store.read('Clarity Snapshots'),'clarity_pages':store.read('Clarity Pages'),
             'period_status':store.read('Period Status'),'rules':store.read('Thresholds'),
             'limitations':['GA hostName EXACT www.iboomto.com; each language uses its own GA property. Source dates use the property timezone.',
             'Channel rows may not sum to the API total. Preserve total and flag discrepancy; cause unverified.',

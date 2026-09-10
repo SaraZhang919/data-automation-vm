@@ -66,13 +66,19 @@ Run `python -m unittest discover -s tests -v`. Tests cover source timezone bound
 One-time migration uses iboomto.backup and iboomto.migrate_v2. Verified full-grid backups include formulas, formats, metadata and values for both workbooks; they live under ignored outputs, never in the public repository. Retired tabs are removed only after a successful compact import and data verification. Use iboomto.setup_archive to verify a human-owned private archive before retention starts.
 
 
-## Compact LLM evidence and weekly Clarity
+## Compact LLM evidence and Clarity every 48 hours
 
 The LLM receives a separate columnar analytical view, not the full workbook or raw server logs. Repeated storage fields and URLs with query strings are removed; unavailable comparison rows are grouped by reason and period while preserving counts, metrics and languages. Selected GA/GSC page/query aggregate values, source quality, dates and every issue remain available. Deep mode reads explicitly selected historical aggregates. Oversized evidence is partitioned across nested dictionaries/tables without dropping sections. No new token spending cap is imposed.
 
 AI Usage exposes provider-reported input_tokens, output_tokens, total_tokens and reasoning_tokens (a subset of output), plus input_characters and evidence_schema. Character reduction is not an exact token/cost estimate. Cache keys use the compact evidence, model, prompt/rule versions and question.
 
-Clarity now makes one unsegmented request on Tuesday at 17:00 JST, numOfDays=3, and stores one project-level row in Clarity Snapshots. No URL/device breakdown is requested or stored. The API maximum is a rolling 72-hour lookback: this is a weekly snapshot, **not a complete calendar-week total**. Daily reports may cite the latest snapshot with its original window; the converted legacy snapshot remains labelled rolling_24h. Metrics include traffic, dead/rage/error clicks, script errors, scroll depth and engagement time. Project totals can include other hosts and must not be equated with filtered GA production totals.
+Clarity uses fixed 48-hour slots anchored at 2026-09-10 17:00 JST (08:00 UTC). The daily workflow collects due slots; subsequent calls in a completed slot skip HTTP. Normal dates are September 10, 12, 14, etc.; month boundaries do not reset the cadence. Failed views can retry on the next run, at most three attempts per view/slot and ten recorded project requests per UTC day. Other clients share the provider's quota. GitHub queue delays can shift actual collection times.
+
+Each batch normally makes two requests with numOfDays=3: an overall request stored in Clarity Snapshots, and dimension1=URL filtered locally into Clarity Pages. Select up to 20 positive-click pages globally across all languages, from a direct GSC final-only page query on www.iboomto.com over the latest seven completed GSC dates (truncated at launch). This does not change the GSC Queries click Top100 rule. Each page row records its GSC selection dates separately from its actual rolling 72-hour Clarity window. Clarity behavior includes all traffic channels, not just organic search.
+
+The API has no documented URL filter and returns at most 1,000 rows without pagination. Thus Top20 bounds stored/analyzed results, not provider coverage. Missing URLs are labelled not_returned with unknown metrics, never zero. Multiple query-string variants matching a page are marked ambiguous rather than summing unique users or rates. Page snapshots have a 90-day retention target; deletion requires successful private archive verification. No archive means rows remain, with Storage Status reporting the need for configuration.
+
+Daily/weekly/monthly LLM evidence contains only the latest overall snapshot and latest page batch (at most 20 rows), not the complete API response or Clarity history. Overlapping windows must never be summed into week/month totals. Legacy 24-hour snapshots retain their original labels. Metrics include traffic, dead/rage/error clicks, script errors, scroll depth and engagement time. Overall project totals may include other hosts and must not be equated with production-filtered GA totals. GA and Clarity patterns are supporting evidence, not user-level attribution or proven causation.
 
 Reference: https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api
 
@@ -85,4 +91,4 @@ Actions mode report-only regenerates analysis from existing stored facts without
 - Count metrics use integer display (`#,##0`); engagement rate and CTR remain percentages. `averageSessionDuration` remains seconds, and position retains decimals.
 - Landing-page selection ranks `activeUsers` under **session** Organic Search, then requests **all-channel** metrics for the selected pages. No First user channel filter is applied.
 - Daily query ranking requests one day with the `query` dimension alone so the API's click ordering applies; the known date is attached locally. Candidate expansion beyond Top100 is not enabled.
-- The event collection cadence, Clarity weekly cadence, seven-day backfill and LLM evidence scope have not changed in this update. Proposals to change them require a separate implementation decision.
+- The event collection cadence and seven-day GA/GSC backfill remain unchanged. The subsequently approved Clarity 48-hour/Top20 update is documented above; other evidence-scope proposals remain unimplemented.
