@@ -1,5 +1,19 @@
 # CHANGELOG.md
 
+## Session 5 — GA4 AI referral traffic
+**Date:** 2026-09-11
+
+### Added
+- `AI Traffic Sources` mapping tab seeded with editable, priority-ordered patterns for common generative-AI referrers.
+- `GA4 AI Traffic` collector for daily, weekly and monthly periods. It writes an exact all-AI segment row plus explainable source rows, while keeping AI sessions inside the GA4 site total.
+- AI traffic evidence in daily/weekly/monthly reports, comparison rules, retention, verification and the workbook guide.
+- UI preview Explore tab for the new AI traffic data and source-level filtering examples.
+
+### Operational notes
+- The aggregate AI row uses a direct GA4 `sessionSource` filter so `activeUsers` is not estimated by summing source rows.
+- Referrer-hidden/direct sessions cannot be classified as AI. Mapping changes are recorded with `mapping_version`.
+- The collector adds two GA4 Data API requests per property and period; API usage is audited with the existing `API Usage` sheet.
+
 ## Session 1 — Initial Build
 **Date:** 2026-05-09
 **What was built:**

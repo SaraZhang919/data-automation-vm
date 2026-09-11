@@ -9,7 +9,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 from .core import DATA_ID,LAUNCH,SITE,LANGS,digest,stamp,load_local_env,parse_properties,daily_window,previous_week,previous_month,language
 from .storage import google_session,Sheets
-from .analytics import Analytics,collect_ga,collect_gsc,collect_business_events
+from .analytics import Analytics,collect_ga,collect_gsc,collect_business_events,collect_ai_traffic
 from .technical import PublicSite,sitemap_collect,check_pages,sf_import,clarity_collect
 from .reporting import initialise_config,metric_findings,reconcile_issues,generate_report
 from .seo import seo_findings
@@ -71,7 +71,9 @@ def main():
             store.upsert('Period Status',[{'id':key,'source':source,'property':prop['id'],'period':kind,'start':str(start),'end':str(end),'status':'pending','updated_at':stamp()}])
             def run_period(prop=prop,key=key):
                 result=collect_ga(api,store,prop,start,end,now,kind) if source=='GA4' else collect_gsc(api,store,start,end,kind)
-                if source=='GA4':collect_business_events(api,store,prop,start,end,now,kind)
+                if source=='GA4':
+                    collect_business_events(api,store,prop,start,end,now,kind)
+                    collect_ai_traffic(api,store,prop,start,end,now,kind)
                 store.upsert('Period Status',[{'id':key,'source':source,'property':prop['id'],'period':kind,'start':str(start),'end':str(end),'status':result['status'],'updated_at':stamp()}])
                 refreshed_periods.add(kind)
                 return result
@@ -104,6 +106,12 @@ def main():
                         if args.end:end=date.fromisoformat(args.end)
                         return collect_business_events(api,store,prop,start,end,now)
                     task('Business events '+prop['language'],business_job)
+                    def ai_traffic_job(prop=prop):
+                        start,end=daily_window(now,api.ga_timezone(prop['id']))
+                        if args.start:start=max(LAUNCH,date.fromisoformat(args.start))
+                        if args.end:end=date.fromisoformat(args.end)
+                        return collect_ai_traffic(api,store,prop,start,end,now)
+                    task('AI traffic '+prop['language'],ai_traffic_job)
             if args.source in ('all','gsc'):
                 def gsc_job():
                     api.gsc_access();start,end=daily_window(now,'America/Los_Angeles')

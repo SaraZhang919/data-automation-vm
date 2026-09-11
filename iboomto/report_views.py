@@ -13,7 +13,7 @@ def generate(store,report,statuses,issues,run_id,report_date,kind='daily',questi
     if kind=='deep':
         from .core import select_url,gsc_final_row
         selection=selection or {};history=[]
-        for tab in ('GA4 Site','GA4 Channels','GA4 Landing Pages','GA4 Events','GA4 Business Events','GSC Site','GSC Pages','GSC Queries'):
+        for tab in ('GA4 Site','GA4 Channels','GA4 AI Traffic','GA4 Landing Pages','GA4 Events','GA4 Business Events','GSC Site','GSC Pages','GSC Queries'):
             for r in store.read(tab):
                 if tab.startswith('GSC ') and not gsc_final_row(r):continue
                 if selection.get('start') and r.get('end','')<selection['start']:continue
@@ -73,6 +73,11 @@ def generate(store,report,statuses,issues,run_id,report_date,kind='daily',questi
             rows.append({'section':'软件下载点击','item':r['language']+' '+r['start']+' — '+r['end'],
                          'value':{k:r.get(k) for k in ('event_count','converting_users','user_conversion_rate','data_status','quality')},
                          'source_link':store.link('GA4 Business Events') if hasattr(store,'link') else ''})
+        for r in payload['detail_summaries'].get('GA4 AI Traffic',[]):
+            if r.get('row_type')!='total':continue
+            rows.append({'section':'AI 引荐流量','item':r.get('language','')+' '+r.get('start','')+' — '+r.get('end',''),
+                         'value':{k:r.get(k) for k in ('sessions','activeUsers','engagedSessions','share_of_sessions','data_status','quality','mapping_version')},
+                         'source_link':store.link('GA4 AI Traffic') if hasattr(store,'link') else ''})
         report.set(tab,rows,headers=['section','item','value','priority','source_link'])
     report.upsert('Data Status',statuses)
     return {'status':'cached' if cached else state,'report_id':rid,'ai_status':record['ai_status'],'overview_refreshed':True}

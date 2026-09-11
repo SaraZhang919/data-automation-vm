@@ -130,6 +130,86 @@ def collect_business_events(api,store,prop,start,end,now,period='daily'):
     store.upsert('GA4 Business Events',records)
     return {'status':'success' if rows else 'waiting_for_event_data','rows':len(records),'event_name':'software_download'}
 
+
+def collect_ai_traffic(api,store,prop,start,end,now,period='daily'):
+    """Collect AI-referral sessions and write daily/weekly/monthly rows.
+
+    The source breakdown and the aggregate AI segment are queried separately:
+    source rows provide explainable domains while the aggregate query provides
+    exact active users for the whole AI segment.  AI is a segmentation of the
+    GA4 total, so its sessions must never be added to the ordinary channel
+    total a second time.
+    """
+    from .analytics import ga_filter,ga_quality
+    from .ai_traffic import AI_SOURCE_TAB,AI_TRAFFIC_TAB,api_filter,source_rows,matches
+    if end<LAUNCH:return {'status':'prelaunch','rows':0}
+    qstart=max(start,LAUNCH);tz=api.ga_timezone(prop['id']);mappings=source_rows(store.read(AI_SOURCE_TAB))
+    if not mappings:return {'status':'not_configured','rows':0}
+    dimensions=(['date'] if period=='daily' else [])+['sessionSource','sessionMedium','sessionSourceMedium','sessionDefaultChannelGroup']
+    metrics=['sessions','activeUsers','engagedSessions']
+    scoped=scope('', '', True)
+    breakdown,breakdown_meta=api.ga(prop['id'],qstart,end,dimensions,metrics,ga_filter())
+    total_dimensions=['date'] if period=='daily' else []
+    ai_totals,totals_meta=api.ga(prop['id'],qstart,end,total_dimensions,metrics,api_filter(ga_filter(),mappings))
+
+    def as_number(value):
+        try:
+            number=float(value)
+            return int(number) if number.is_integer() else number
+        except (TypeError,ValueError):
+            return 0
+
+    def key_date(row):
+        return str(day(row['date'])) if period=='daily' and row.get('date') else str(end)
+
+    grouped={}
+    for raw in breakdown:
+        mapping=matches(raw,mappings)
+        if not mapping:continue
+        d=key_date(raw);source=str(raw.get('sessionSource') or '(direct source unavailable)');medium=str(raw.get('sessionMedium') or '(not set)');channel=str(raw.get('sessionDefaultChannelGroup') or '')
+        bucket=grouped.setdefault((d,mapping['id'],source,medium,channel),{'mapping':mapping,'sessions':0,'activeUsers':0,'engagedSessions':0})
+        for metric in metrics:bucket[metric]+=as_number(raw.get(metric))
+    total_by_day={key_date(row):row for row in ai_totals}
+    site_totals={str(r.get('end')):r for r in store.read('GA4 Site') if str(r.get('property'))==str(prop['id']) and r.get('period')==period and str(qstart)<=str(r.get('end',''))<=str(end)}
+    dates=[str(d) for d in days(qstart,end)] if period=='daily' else [str(end)]
+    records=[]
+    for d in dates:
+        rs=d if period=='daily' else str(start)
+        aggregate=total_by_day.get(d,{})
+        ai_sessions=as_number(aggregate.get('sessions'))
+        ai_active=as_number(aggregate.get('activeUsers'))
+        ai_engaged=as_number(aggregate.get('engagedSessions'))
+        site=site_totals.get(d,{})
+        site_sessions=site.get('sessions','')
+        try:share=ai_sessions/float(site_sessions) if site_sessions not in ('',None) and float(site_sessions)>0 else ''
+        except (TypeError,ValueError):share=''
+        quality=ga_quality(totals_meta or breakdown_meta,date.fromisoformat(d),tz,now,date.fromisoformat(rs))
+        base={'source':'GA4','property':prop['id'],'language':prop['language'],'period':period,'start':rs,'end':d,
+              'timezone':tz,'quality':quality,'scope':scoped,'hostname_filter':'hostName EXACT '+HOST,'scope_version':SCOPE_VERSION,
+              'collection_method':'GA4 sessionSource/sessionMedium','match_dimension':'sessionSource','mapping_version':mappings[0]['mapping_version'],
+              'total_sessions':site_sessions,'data_status':'returned' if aggregate else 'returned_no_ai_matches','collected_at':stamp()}
+        records.append({**base,'id':digest(['GA4 AI Traffic',prop['id'],period,rs,d,'ALL_AI',scoped]),'row_type':'total','ai_source':'ALL_AI',
+                        'session_source':'','session_medium':'','source_channel':'AI referral','sessions':ai_sessions,'activeUsers':ai_active,
+                        'engagedSessions':ai_engaged,'share_of_sessions':share,'share_of_ai_sessions':1 if ai_sessions else ''})
+        for (row_date,source_id,source,medium,channel),bucket in grouped.items():
+            if row_date!=d:continue
+            source_sessions=bucket['sessions']
+            try:source_share=source_sessions/float(site_sessions) if site_sessions not in ('',None) and float(site_sessions)>0 else ''
+            except (TypeError,ValueError):source_share=''
+            try:ai_share=source_sessions/ai_sessions if ai_sessions else ''
+            except (TypeError,ValueError):ai_share=''
+            mapping=bucket['mapping']
+            records.append({**base,'id':digest(['GA4 AI Traffic',prop['id'],period,rs,d,source_id,source,medium,scoped]),'row_type':'source',
+                            'ai_source':mapping['source_name'],'ai_source_id':mapping['id'],'session_source':source,'session_medium':medium,
+                            'source_channel':channel or 'AI referral','sessions':source_sessions,'activeUsers':bucket['activeUsers'],
+                            'engagedSessions':bucket['engagedSessions'],'share_of_sessions':source_share,'share_of_ai_sessions':ai_share,
+                            'mapping_pattern':mapping['pattern']})
+    def partition(row):
+        return str(row.get('property'))==str(prop['id']) and row.get('period')==period and str(qstart)<=str(row.get('end',''))<=str(end) and row.get('scope')==scoped
+    save(store,AI_TRAFFIC_TAB,records,partition,('sessions','activeUsers','engagedSessions','share_of_sessions','share_of_ai_sessions'))
+    return {'status':ga_quality(totals_meta or breakdown_meta,end,tz,now,start),'rows':len(records),'sources':len({k[1] for k in grouped}),
+            'mapping_version':mappings[0]['mapping_version'],'requests':2}
+
 def collect_gsc(api,store,start,end,period='daily',lang='all',exact='',prefix='',manual=False,views=None):
     if end<LAUNCH:return {'rows':0,'status':'prelaunch'}
     qstart=max(start,LAUNCH);requested_end=end

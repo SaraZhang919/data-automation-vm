@@ -14,7 +14,7 @@ def expired(row,tab,today):
     return d<today-timedelta(days=keep)
 
 def maintain(store,today):
-    eligible=['GA4 Site','GSC Site','GA4 Channels','GA4 Landing Pages','GA4 Events','GA4 Business Events','GSC Pages','GSC Queries',
+    eligible=['GA4 Site','GSC Site','GA4 Channels','GA4 AI Traffic','GA4 Landing Pages','GA4 Events','GA4 Business Events','GSC Pages','GSC Queries',
               'Sitemap History','Technical History','Data Revisions','Run Status','Clarity Snapshots','Clarity Pages','Clarity Requests','API Usage']
     old={tab:[r for r in store.read(tab) if expired(r,tab,today)] for tab in eligible}
     old={tab:rows for tab,rows in old.items() if rows};count=sum(map(len,old.values()))

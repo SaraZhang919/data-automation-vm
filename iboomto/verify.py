@@ -8,7 +8,7 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--env-file');p.add_argument('--annotate-revisions',action='store_true');args=p.parse_args()
     if args.env_file:load_local_env(args.env_file)
     s=google_session();data=Sheets(s,DATA_ID,args.annotate_revisions)
-    tables=['GA4 Site','GA4 Channels','GA4 Landing Pages','GA4 Events','GSC Site','GSC Pages','GSC Queries','SF Pages','SF Hreflang Issues','GA4 Business Events','Comparisons','Sitemap URLs','Technical Checks','URL Inspection','Manual Results']
+    tables=['GA4 Site','GA4 Channels','GA4 AI Traffic','GA4 Landing Pages','GA4 Events','GSC Site','GSC Pages','GSC Queries','SF Pages','SF Hreflang Issues','GA4 Business Events','AI Traffic Sources','Comparisons','Sitemap URLs','Technical Checks','URL Inspection','Manual Results']
     result={}
     for name in tables:
         rows=data.read(name);ids=[r.get('id') for r in rows]

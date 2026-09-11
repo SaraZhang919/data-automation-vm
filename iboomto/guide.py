@@ -13,6 +13,8 @@ DESCRIPTIONS={
  'GA4 Site':('主要数据','原 GA4 Daily。站点汇总，日/周/月在同表，按 period / start / end 筛选；总量直接查询 API。'),
  'GSC Site':('主要数据','原 GSC Daily。仅采集和分析已完成的final数据，截止日期按Google完成边界确定；all为属性总量，各语言按页面路径过滤。历史预览记录不参与当前报告。'),
  'GA4 Channels':('主要数据','channel 直接显示渠道名称；Session default channel group。不可将渠道行相加替代站点总量。'),
+ 'AI Traffic Sources':('人工配置','AI 引荐来源映射。程序按 priority 读取启用的 pattern，匹配 GA4 sessionSource；可新增来源或禁用误报，mapping_version 会进入数据记录。'),
+ 'GA4 AI Traffic':('主要数据','AI 引荐流量分段。总行 row_type=total 由 GA4 AI 来源过滤直接查询，source 行按域名拆分；sessions 已包含在 GA4 Site，不可再次加总。日/周/月均直接查询对应周期。'),
  'GA4 Landing Pages':('主要数据','会话入口页，不是全部页面 PV。按语言 Top30 Organic active users + 全部人工 URL；周/月保留上期 Top30。page_url 无参数。'),
  'GA4 Events':('事件数据','原始事件次数和触发用户，event_name 可筛选；software_download 及事件质量汇总进入 LLM，避免重复计算旧 dl_。'),
  'GA4 Business Events':('业务指标','software_download 次数、周期内去重触发用户、触发用户 / 同范围 totalUsers。无事件记录显示 waiting_for_event_data，指标留空。'),
@@ -63,6 +65,7 @@ def update_guide(store,report=None):
         ('GA过滤规则','所有GA统计均使用 hostName EXACT www.iboomto.com，精确匹配；不是 CONTAINS，也不是所有 *.iboomto.com。语言取相应独立 GA 属性。'),
         ('排除范围','不等于 www.iboomto.com 的 hostName 全部排除，包括测试子域、后台子域、localhost、内网IP、空/未设置值及裸域 iboomto.com。新出现的测试域也自动排除。'),
         ('GA界面对账','选择相同语言的 GA 属性→相同统计日期（属性时区）→添加 Host name / 主机名 精确等于 www.iboomto.com。渠道使用 Session default channel group；sessions 与 sessions 对比，不用 First user 渠道。'),
+        ('AI流量定义','GA4 AI traffic 通过 sessionSource/sessionMedium 识别，映射表由 AI Traffic Sources 维护。ChatGPT、Perplexity、Claude、Gemini、Copilot、Poe、You.com、Phind、DeepSeek、Grok 默认启用；AI custom channel 排在 Referral 前。该分段已包含在 GA4 Site sessions 中，不可再次加总；客户端隐藏 referrer 时无法识别。'),
         ('采集时间','JST：每日17:00；周日20:00 GA周预览；周二17:00 GA周修订+GSC周报；每月4日16:00月报。GitHub定时可能排队。源数据日期按GA属性时区/GSC洛杉矶时区，不能用JST日期硬对照。'),
         ('回补与成熟度','每日在最近7个已结束来源日期窗口内回补，上线前截断。GA保持原计划；GSC先核对完成边界，只采集截至final_through的final数据，不以预览数据补位。按记录键更新而不重复追加。'),
         ('页面数量','每日最近可用7天选页：每语言GA Organic active users Top30、GSC clicks Top30，再加人工表全部有效URL；周/月并入上期Top30。人工页无记录时显示 no_data_returned，指标留空。'),
@@ -80,8 +83,8 @@ def update_guide(store,report=None):
     ]
     groups=[
         ('报告与行动',['Overview','Weekly Overview','Monthly Overview','Issues','Comparisons','Report History','Deep Analysis']),
-        ('人工维护',['Properties','Page name - manual management','Site Event Logs - Manual','Event Mapping','Thresholds']),
-        ('流量与下载',['GA4 Site','GA4 Channels','GA4 Landing Pages','GA4 Business Events','GA4 Events','GSC Site','GSC Pages','GSC Queries','Clarity Snapshots','Clarity Pages','Manual Results']),
+        ('人工维护',['Properties','Page name - manual management','Site Event Logs - Manual','Event Mapping','AI Traffic Sources','Thresholds']),
+        ('流量与下载',['GA4 Site','GA4 Channels','GA4 AI Traffic','GA4 Landing Pages','GA4 Business Events','GA4 Events','GSC Site','GSC Pages','GSC Queries','Clarity Snapshots','Clarity Pages','Manual Results']),
         ('技术 SEO',['Technical Findings','Technical Checks','URL Inspection','SF Pages','SF Hreflang Issues','Sitemap URLs','Sitemap Sources','Sitemap Crawl Comparison','Sitemap History','Technical History']),
         ('数据质量',['Data Status','Run Status','GA4 Data Quality','Page Register Checks','Check Coverage','Period Status','Import Batches','Data Revisions']),
         ('系统与用量',['AI Usage','AI Run Usage','API Usage','Storage Status','Archive Config','Clarity Requests','AI Cache']),

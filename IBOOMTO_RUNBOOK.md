@@ -29,7 +29,7 @@ GitHub scheduling may queue. Reports run after collection. GA maturity means 48 
 
 ## Tables and selection
 
-GA4 Site / GSC Site replace the former Daily tab titles, preserving their sheet IDs. Same-type rows share a sheet with period, start, end. GA channels, landing pages, events and GSC pages/queries expose plain dimensions; page fields include subfolder, page_type, page_name, page_url. Unknown manual metadata remains empty. CTR and conversion rates are numeric percentages; change_pp is percentage points. key_events_per_user is not CTR.
+GA4 Site / GSC Site replace the former Daily tab titles, preserving their sheet IDs. Same-type rows share a sheet with period, start, end. GA channels, landing pages, events and GSC pages/queries expose plain dimensions; page fields include page_type, page_name and page_url. Unknown manual metadata remains n.a. CTR and conversion rates are numeric percentages; change_pp is percentage points. key_events_per_user is not CTR.
 
 Page name - manual management is the only page registry. Properties, the page registry and Site Event Logs - Manual are read-only to the program. Supported path prefixes: ar, ja, zh-tw, es, de, fr, it, pt; unprefixed paths of any depth are English. JP/TW labels map to ja/zh-tw. Incorrect double slashes are flagged, not silently rewritten.
 
@@ -37,9 +37,11 @@ Per-language daily page pool: GA organic active users Top30, GSC clicks Top30, p
 
 Event Mapping contains only software_download. Semantic confirmation is distinct from actual tracking verification. Each property must emit/create that event; marking a name as a key event alone does not convert dl_* events or backfill history. Counts describe download clicks, not completed downloads or installs. GA4 Business Events calculates full-period deduplicated trigger users and user conversion rate. No rows means waiting_for_event_data, not proven zero.
 
+AI Traffic Sources is the editable source mapping used by the AI-referral collector. It is seeded with ChatGPT, Perplexity, Claude, Gemini, Copilot, Poe, You.com, Phind, DeepSeek and Grok. Each enabled pattern is matched against the GA4 sessionSource dimension. GA4 AI Traffic writes a total row and matched-source rows for every daily, weekly and monthly period. The total row uses a second GA4 report filtered to all enabled patterns, so activeUsers is exact for the AI segment; source-level activeUsers are per-source rows and should not be summed as distinct users. AI traffic is already included in GA4 Site sessions and is assigned before Referral in the custom channel view.
+
 ## Reports and comparisons
 
-Overview, Weekly Overview and Monthly Overview update independently. Report History preserves issued versions; changed evidence generates a revision. Cached AI text never prevents current facts from refreshing. The report includes period-matched business-event metrics, channels/pages/query summaries, comparisons and technical issues. P1 is critical-page/core-collection failure; P2 is a local SEO issue or adequately supported mature-metric anomaly; P3 is observation/opportunity. LLM explains evidence and priority, not invented causality.
+Overview, Weekly Overview and Monthly Overview update independently. Report History preserves issued versions; changed evidence generates a revision. Cached AI text never prevents current facts from refreshing. The report includes period-matched business-event metrics, channels/pages/query summaries, AI-referral traffic, comparisons and technical issues. P1 is critical-page/core-collection failure; P2 is a local SEO issue or adequately supported mature-metric anomaly; P3 is observation/opportunity. LLM explains evidence and priority, not invented causality.
 
 Comparisons exists immediately, with unavailable reasons until a compatible baseline exists. Day-over-day and same-weekday gates are independent. Missing data is not zero; zero baselines are new_activity. First full week is September 13–19; two full weeks finish September 26. September is a partial launch month.
 

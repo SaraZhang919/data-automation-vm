@@ -101,4 +101,4 @@ def ga_quality(meta,end,tz,now,start):
     return 'partial_launch' if start<LAUNCH else 'mature'
 
 
-from .collectors import collect_ga, collect_gsc, collect_business_events
+from .collectors import collect_ga, collect_gsc, collect_business_events, collect_ai_traffic

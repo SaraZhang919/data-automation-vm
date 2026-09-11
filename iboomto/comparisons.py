@@ -4,7 +4,7 @@ from .core import LAUNCH, RULE_VERSION, digest, count_alert, issue, gsc_final_ro
 
 SPECS={'GA4 Site':['sessions','activeUsers','engagementRate'], 'GSC Site':['clicks','impressions','ctr'],
        'GA4 Business Events':['event_count','converting_users','user_conversion_rate'],
-       'GA4 Channels':['sessions'], 'GA4 Landing Pages':['sessions','activeUsers'], 'GSC Pages':['clicks','impressions','ctr']}
+       'GA4 Channels':['sessions'], 'GA4 AI Traffic':['sessions'], 'GA4 Landing Pages':['sessions','activeUsers'], 'GSC Pages':['clicks','impressions','ctr']}
 RATES={'ctr','engagementRate','user_conversion_rate'}
 
 def baseline_range(cur,kind):
@@ -23,10 +23,11 @@ def compare(store):
     for tab,metrics in SPECS.items():
         groups={}
         for r in store.read(tab):
+            if tab=='GA4 AI Traffic' and r.get('row_type')!='total':continue
             if tab.startswith('GSC ') and not gsc_final_row(r):continue
             if r.get('period') not in ('daily','weekly','monthly'):continue
             if not r.get('start') or not r.get('end'):continue
-            k=(r.get('language',''),str(r.get('property','')),r.get('period'),r.get('channel',''),r.get('page_url',''),r.get('action',''),r.get('scope',''))
+            k=(r.get('language',''),str(r.get('property','')),r.get('period'),r.get('channel',''),r.get('page_url',''),r.get('action',''),r.get('scope',''),r.get('ai_source',''))
             groups.setdefault(k,{})[(r['start'],r['end'])]=r
         for key,items in groups.items():
             cur=max(items.values(),key=lambda r:r['end'])

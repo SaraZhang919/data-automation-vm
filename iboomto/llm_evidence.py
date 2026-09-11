@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 from urllib.parse import urlsplit,urlunsplit
 
-SCHEMA='iboomto-analysis-v5'
+SCHEMA='iboomto-analysis-v6'
 DROP={'id','record_id','property','dimensions','metadata','scope','scope_version','collected_at','checked_at',
       'observed_at','updated_at','generated_at','started_at','finished_at','run_id','source_link','inspection_link',
       'first_seen','last_seen','resolved_at','priority_reason','hostname_filter','raw_hashes','folder','batch'}
@@ -88,6 +88,7 @@ def compact_evidence(payload):
             'ga_data_quality':table([r for r in quality if r.get('end')==newest]),
             'sf_batches':table(payload.get('sf_batches',[])),
             'clarity':clarity_summary(payload.get('clarity',[]),payload.get('report_period'),payload.get('clarity_pages',[])),
+            'ai_traffic_mapping':table(payload.get('ai_traffic_mapping',[])),
             'period_status':table(payload.get('period_status',[])),
             'rules':table([{**r,'rule_name':r.get('id','')} for r in payload.get('rules',[])]),'limitations':payload.get('limitations',[]),
             **({'requested_selection':clean(payload['requested_selection']),
