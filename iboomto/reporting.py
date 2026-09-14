@@ -64,6 +64,10 @@ def reconcile_issues(report,findings,checked,store=None):
 
 def evidence(store,statuses,issues,kind='daily'):
     from .core import gsc_final_row
+    from .sf_freshness import fresh_batches,report_issue_allowed
+    sf=fresh_batches(store)
+    issues=[r for r in issues if report_issue_allowed(r,sf)]
+    statuses=[({'source':'Screaming Frog','status':'skipped_stale_or_missing'} if r.get('source')=='Screaming Frog' and not sf else r) for r in statuses]
     period='weekly' if kind.startswith('weekly') else 'monthly' if kind=='monthly' else 'daily'
     latest=[];coverage=[];details={}
     for tab in ('GA4 Site','GSC Site','GA4 Business Events','GA4 Channels','GA4 AI Traffic','GA4 Landing Pages','GA4 Events','GSC Pages','GSC Queries'):
@@ -88,14 +92,14 @@ def evidence(store,statuses,issues,kind='daily'):
             'comparisons':[r for r in store.read('Comparisons') if r.get('period')==period], 'detail_summaries':details,
             'issues':[x for x in issues if x.get('state')!='resolved'],'event_mapping':store.read('Event Mapping'),
             'ga_data_quality':[r for r in store.read('GA4 Data Quality') if r.get('period')==period and r.get('status')!='matches'],
-            'sf_batches':store.read('Import Batches')[-3:],'clarity':store.read('Clarity Snapshots'),'clarity_pages':store.read('Clarity Pages'),
+            'sf_batches':sf,'clarity':store.read('Clarity Snapshots'),'clarity_pages':store.read('Clarity Pages'),
             'period_status':store.read('Period Status'),'rules':store.read('Thresholds'),'ai_traffic_mapping':store.read('AI Traffic Sources'),
             'limitations':['GA hostName EXACT www.iboomto.com; each language uses its own GA property. Source dates use the property timezone.',
             'Channel rows may not sum to the API total. Preserve total and flag discrepancy; cause unverified.',
             'Users across properties, days, or pages are not globally additive. Weekly/monthly users come from full-period API queries.',
             'No event row means waiting for data, not proven zero downloads. software_download measures click intent, not completed installation.',
             'GSC uses finalized data. Query selection unions clicks Top100, impressions Top100 and up to 50 new/50 growing candidates from a maximum 5000-query pool per language/period. These are not full site totals. New means absent from the comparison pool, not proven first-ever appearance. Missing baselines are not zero.',
-            'Clarity uses rolling windows. SF is a dated snapshot. GA mature is a 48-hour policy, not a provider guarantee.',
+            'Clarity uses rolling windows. SF evidence is included only from verified crawls on the current JST date; stale or missing SF is omitted, not healthy or resolved. A fresh SF snapshot is not a whole-week/month measurement. GA mature is a 48-hour policy, not a provider guarantee.',
             'AI traffic is a GA4 sessionSource/sessionMedium segment. It is assigned before Referral in the custom channel view and is already included in GA4 Site sessions; do not add it again. Source attribution can be missing when AI clients strip referrers.']}
 
 

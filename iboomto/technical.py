@@ -78,7 +78,9 @@ def check_pages(store,web,urls,now):
     planned={r['url'] for r in store.read('Page Register Checks') if 'not_yet_launched' in r.get('status','')}
     priority|={SITE+'/' if lg=='en' else SITE+'/'+lg for lg in LANGS}
     candidates={r['url'] for r in urls if language(r['url']) is not None}|priority
-    candidates|={r['url'] for r in store.read('SF Pages') if str(r.get('status','')).startswith(('4','5')) and language(r['url']) is not None}
+    from .sf_freshness import fresh_batches
+    fresh_ids={r['id'] for r in fresh_batches(store,now)}
+    candidates|={r['url'] for r in store.read('SF Pages') if r.get('batch') in fresh_ids and str(r.get('status','')).startswith(('4','5')) and language(r['url']) is not None}
     old={r['url']:r for r in store.read('Technical Checks')}
     candidates=sorted(candidates,key=lambda u:(u not in priority,u in old,old.get(u,{}).get('checked_at',''),u))[:500]
     robots=None; robots_status='unavailable'
@@ -147,12 +149,16 @@ def parse_csv(raw,required):
     return rows
 
 def sf_import(session,store,now):
+    from .sf_freshness import fresh_date
     folders=[f for f in drive_list(session,SF_FOLDER) if f['mimeType']=='application/vnd.google-apps.folder']
     done={r['id'] for r in store.read('Import Batches') if r.get('status')=='success' and r.get('schema_version')=='compact-v2'}
     latest_time=max((r.get('batch_date','') for r in store.read('Import Batches') if r.get('status')=='success'),default='')
-    issues=[]; imported=0
+    issues=[]; imported=0; skipped_old=0
     for folder in sorted(folders,key=lambda f:f['name']):
         if len(folder['name'])!=8 or not folder['name'].isdigit():continue
+        if not fresh_date(folder['name'],now):
+            skipped_old+=1
+            continue
         files={f['name']:f for f in drive_list(session,folder['id'])}
         names=['internal_all.csv','inlinks.csv','hreflang_all.csv']
         bid=digest([folder['id'],[(n,files.get(n,{}).get('md5Checksum'),files.get(n,{}).get('modifiedTime')) for n in names]])
@@ -163,12 +169,26 @@ def sf_import(session,store,now):
         if any((now-datetime.fromisoformat(files[n]['modifiedTime'].replace('Z','+00:00'))).total_seconds()<60 for n in names):continue
         try:
             raw={n:request(session,'GET',f"https://www.googleapis.com/drive/v3/files/{files[n]['id']}",params={'alt':'media'}).content for n in names}
+            hashes={n:digest(raw[n].hex()) for n in names}
+            def same_content(r):
+                value=r.get('raw_hashes',{})
+                if isinstance(value,str):
+                    try:value=json.loads(value)
+                    except ValueError:return False
+                return r.get('status')=='success' and value==hashes
+            if any(same_content(r) for r in store.read('Import Batches')):
+                store.upsert('Import Batches',[{**rec,'status':'skipped_duplicate','detail':'Identical previously imported CSV content'}])
+                continue
             pages=parse_csv(raw[names[0]],['Address','Status Code','Content Type'])
             links=parse_csv(raw[names[1]],['From','To'])
             hrefs=parse_csv(raw[names[2]],['Address'])
             after={f['name']:f for f in drive_list(session,folder['id'])}
             if any(after.get(n,{}).get('md5Checksum')!=files[n].get('md5Checksum') for n in names):raise ApiFailure('Batch changed during download')
             observed=min((r.get('Crawl Timestamp','') for r in pages if r.get('Crawl Timestamp')),default=folder['name'])
+            if not fresh_date(observed,now) or any(not fresh_date(r['Crawl Timestamp'],now) for r in pages if r.get('Crawl Timestamp')):
+                store.upsert('Import Batches',[{**rec,'status':'skipped_stale','crawl_timestamp':observed,'detail':'Old or unparseable crawl date; no findings or snapshot update'}])
+                skipped_old+=1
+                continue
             html=[r for r in pages if 'html' in r['Content Type']]
             page_set={r['Address'] for r in html}
             packed=[]
@@ -192,15 +212,15 @@ def sf_import(session,store,now):
                     if flagged:findings.append({'id':digest([bid,r['Address']]),'url':r['Address'],'batch':bid,'evidence':flagged,'source_link':rec['source_link']})
                 store.set('SF Hreflang Issues',findings,headers=['id','url','batch','evidence','source_link'])
                 latest_time=folder['name']
-            store.upsert('Import Batches',[{**rec,'status':'success','page_rows':len(pages),'html_rows':len(html),'link_rows':len(links),'hreflang_rows':len(hrefs),'crawl_timestamp':observed,'raw_hashes':{n:digest(raw[n].hex()) for n in names}}])
+            store.upsert('Import Batches',[{**rec,'status':'success','page_rows':len(pages),'html_rows':len(html),'link_rows':len(links),'hreflang_rows':len(hrefs),'crawl_timestamp':observed,'freshness_policy':'same-jst-day-v1','raw_hashes':{n:digest(raw[n].hex()) for n in names}}])
             imported+=1
         except Exception as exc:
             store.upsert('Import Batches',[{**rec,'status':'failed','detail':type(exc).__name__}])
     from .core import LAUNCH
     age=(now.date()-datetime.strptime(latest_time,'%Y%m%d').date()).days if latest_time else None
-    allowed_age=4 if (now.date()-LAUNCH).days<30 else 7
-    state='waiting_for_upload' if not latest_time else 'stale' if age>allowed_age else 'success'
-    return issues,{'imported':imported,'latest_batch':latest_time,'age_days':age,'status':state}
+    from .sf_freshness import fresh_batches
+    state='success' if fresh_batches(store,now) else 'skipped_stale' if latest_time or skipped_old else 'waiting_for_upload'
+    return issues,{'imported':imported,'latest_batch':latest_time,'age_days':age,'skipped_old':skipped_old,'status':state}
 
 def clarity_collect(store,token,now,api=None):
     from .clarity import collect

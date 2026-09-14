@@ -23,7 +23,8 @@ def seo_findings(store):
             reciprocal=as_dict(other.get('hreflang',{}))
             if url not in reciprocal.values():
                 issues.append(issue('hreflang_return_missing',url,'yellow',{'target':target},r['checked_at']))
-    batches=[r for r in store.read('Import Batches') if r.get('status')=='success']
+    from .sf_freshness import fresh_batches
+    batches=fresh_batches(store)
     if batches:
         latest=max(batches,key=lambda r:(r['batch_date'],r.get('checked_at','')))
         pages={r['url']:r for r in store.read('SF Pages') if r.get('batch')==latest['id']}
@@ -36,7 +37,7 @@ def seo_findings(store):
             if not found and first>=latest['batch_date']:note='waiting_for_next_crawl'
             summary.append({'id':url,'url':url,'language':language(url),'sf_batch_date':latest['batch_date'],'status':note,'has_internal_inlink':url in linked,'checked_at':stamp()})
             if found and url not in linked and urlsplit_path(url) not in ('','/'):
-                issues.append(issue('no_internal_inlink_in_export',url,'yellow','No inlink from crawled HTML pages; orphan candidate, not confirmed orphan',latest.get('crawl_timestamp',latest['batch_date']),'SF Pages'))
+                issues.append({**issue('no_internal_inlink_in_export',url,'yellow','No inlink from crawled HTML pages; orphan candidate, not confirmed orphan',latest.get('crawl_timestamp',latest['batch_date']),'SF Pages'),'sf_batch':latest['id']})
         store.set('Sitemap Crawl Comparison',summary)
     return issues
 
