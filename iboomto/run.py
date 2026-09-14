@@ -15,6 +15,7 @@ from .reporting import initialise_config,metric_findings,reconcile_issues,genera
 from .seo import seo_findings
 from .pages import priority_urls
 from .inspection import select_inspection_urls
+from .inspection_history import merge_observation, seed_observations
 
 def main():
     p=argparse.ArgumentParser()
@@ -133,7 +134,8 @@ def main():
                     return {'status':'success','checked':len(successful)}
                 task('Technical checks',checks_job)
                 def inspect_job():
-                    old={r['url']:r for r in store.read('URL Inspection')}
+                    seeded,history=seed_observations(store.read('URL Inspection'))
+                    old={r['url']:r for r in seeded}
                     priority=priority_urls(store)
                     # Each language has its own 30-URL rotation (270 total by default).
                     limit=int(os.environ.get('IBOOMTO_INSPECTION_PER_LANGUAGE_LIMIT','30'))
@@ -153,9 +155,14 @@ def main():
                         except Exception as e:return {'id':u,'url':u,'checked_at':stamp(),'api_status':'failed','error_type':type(e).__name__}
                     with ThreadPoolExecutor(max_workers=4) as pool:
                         for future in as_completed([pool.submit(inspect_one,u) for u in urls]):
-                            row=future.result();records.append(row)
+                            current=future.result()
+                            row,event=merge_observation(old.get(current['url'],{}),current)
+                            row['observation_tracking_version']='v1'
+                            records.append(row)
+                            if event:history.append(event)
                             if row['api_status']=='failed':failed+=1
-                    store.upsert('URL Inspection',records)
+                    store.upsert('URL Inspection',seeded+records)
+                    store.upsert('URL Inspection History',history)
                     return {'status':'partial' if failed else 'success','checked':len(records),'failed':failed}
                 task('URL Inspection',inspect_job)
             if args.source in ('all','clarity'):
