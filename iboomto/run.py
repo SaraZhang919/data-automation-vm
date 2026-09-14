@@ -14,6 +14,7 @@ from .technical import PublicSite,sitemap_collect,check_pages,sf_import,clarity_
 from .reporting import initialise_config,metric_findings,reconcile_issues,generate_report
 from .seo import seo_findings
 from .pages import priority_urls
+from .inspection import select_inspection_urls
 
 def main():
     p=argparse.ArgumentParser()
@@ -134,9 +135,9 @@ def main():
                 def inspect_job():
                     old={r['url']:r for r in store.read('URL Inspection')}
                     priority=priority_urls(store)
-                    # Rotate 30 URLs by default; hard ceiling 100. Avoid holding the whole daily report for a slow secondary API.
-                    limit=min(100,max(9,int(os.environ.get('IBOOMTO_INSPECTION_DAILY_LIMIT','30'))))
-                    urls=sorted({r['url'] for r in sitemap_urls}|priority,key=lambda u:(u in old,old.get(u,{}).get('checked_at',''),u not in priority,u))[:limit]
+                    # Each language has its own 30-URL rotation (270 total by default).
+                    limit=int(os.environ.get('IBOOMTO_INSPECTION_PER_LANGUAGE_LIMIT','30'))
+                    urls=select_inspection_urls((r['url'] for r in sitemap_urls),old,priority,limit)
                     records=[];failed=0
                     worker=threading.local()
                     def inspect_one(u):
