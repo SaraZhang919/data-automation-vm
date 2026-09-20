@@ -64,9 +64,12 @@ class SFFreshnessTests(unittest.TestCase):
     def test_all_report_types_exclude_old_sf_issues_and_batches(self):
         data = MemoryStore()
         data.set('Import Batches',[{'id':'old','status':'success','batch_date':'20260909'}])
+        from iboomto.core import stamp
+        observed=stamp()
+        data.set('Technical Checks',[{'url':'https://www.iboomto.com/a','checked_at':observed,'check_status':'success'}])
         issues=[{'source':'SF Pages','kind':'sf_http_error','evidence':{'batch':'old'}},
                 {'source':'SF Pages','kind':'no_internal_inlink_in_export'},
-                {'source':'Technical Checks','kind':'http_error'}]
+                {'source':'Technical Checks','kind':'http_error','url':'https://www.iboomto.com/a','observed_at':observed}]
         for kind in ('daily','weekly','weekly-preview','monthly'):
             payload=evidence(data,[{'source':'Screaming Frog','latest_batch':'20260909'}],issues,kind)
             self.assertEqual(payload['sf_batches'],[])

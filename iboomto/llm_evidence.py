@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 from urllib.parse import urlsplit,urlunsplit
 
-SCHEMA='iboomto-analysis-v6'
+SCHEMA='iboomto-analysis-v7-evidence-dates'
 DROP={'id','record_id','property','dimensions','metadata','scope','scope_version','collected_at','checked_at',
       'observed_at','updated_at','generated_at','started_at','finished_at','run_id','source_link','inspection_link',
       'first_seen','last_seen','resolved_at','priority_reason','hostname_filter','raw_hashes','folder','batch'}
@@ -84,7 +84,11 @@ def compact_evidence(payload):
             'details':details,'query_summary':table(query_summaries),
             'query_policy':'Summary covers the full selected union, not all site queries. Category counts overlap. Daily details: up to 5 per category, deduplicated, plus all explicit alerts or growth >=100 daily impressions and >=200%; weekly/monthly include the selected union. Missing baselines are unknown. New-in-pool does not mean first ever.',
             'comparisons':comparison_summary(payload.get('comparisons',[])),
-            'issues':table([{**r,'issue_id':r.get('id','')} for r in payload.get('issues',[])]),'event_mapping':table(payload.get('event_mapping',[])),
+            'issue_date_policy':'Use evidence_observed_at, never the report date, for technical claims. Missing/old evidence is not a current verified fault. An absent URL returning 404 alone does not imply a broken site. Never infer sessions or visits from issue existence.',
+            'issues':table([{**r,'issue_id':r.get('id',''),
+                             'evidence_observed_at':r.get('observed_at') or r.get('last_seen') or r.get('checked_at'),
+                             'evidence_last_seen':r.get('last_seen'),
+                             'discovery_source':r.get('discovery_source','unknown')} for r in payload.get('issues',[])]),'event_mapping':table(payload.get('event_mapping',[])),
             'ga_data_quality':table([r for r in quality if r.get('end')==newest]),
             'sf_batches':table(payload.get('sf_batches',[])),
             'clarity':clarity_summary(payload.get('clarity',[]),payload.get('report_period'),payload.get('clarity_pages',[])),

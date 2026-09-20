@@ -77,10 +77,12 @@ def check_pages(store,web,urls,now):
     priority=priority_urls(store)
     planned={r['url'] for r in store.read('Page Register Checks') if 'not_yet_launched' in r.get('status','')}
     priority|={SITE+'/' if lg=='en' else SITE+'/'+lg for lg in LANGS}
-    candidates={r['url'] for r in urls if language(r['url']) is not None}|priority
+    sitemap_urls={r['url'] for r in urls if language(r['url']) is not None}
+    candidates=sitemap_urls|priority
     from .sf_freshness import fresh_batches
     fresh_ids={r['id'] for r in fresh_batches(store,now)}
-    candidates|={r['url'] for r in store.read('SF Pages') if r.get('batch') in fresh_ids and str(r.get('status','')).startswith(('4','5')) and language(r['url']) is not None}
+    sf_urls={r['url'] for r in store.read('SF Pages') if r.get('batch') in fresh_ids and str(r.get('status','')).startswith(('4','5')) and language(r['url']) is not None}
+    candidates|=sf_urls
     old={r['url']:r for r in store.read('Technical Checks')}
     candidates=sorted(candidates,key=lambda u:(u not in priority,u in old,old.get(u,{}).get('checked_at',''),u))[:500]
     robots=None; robots_status='unavailable'
@@ -92,7 +94,8 @@ def check_pages(store,web,urls,now):
     except Exception:pass
     records=[];issues=[];checked=set()
     for url in candidates:
-        rec={'id':url,'url':url,'language':language(url),'checked_at':stamp(),'priority':url in priority,'robots_status':robots_status}
+        origins=[name for name,pool in [('sitemap',sitemap_urls),('manual_register_or_language_home',priority),('fresh_sf',sf_urls)] if url in pool]
+        rec={'id':url,'url':url,'language':language(url),'checked_at':stamp(),'priority':url in priority,'robots_status':robots_status,'discovery_source':'|'.join(origins)}
         try:
             r=web.get(url)
             if r.status_code>=400:
@@ -110,7 +113,7 @@ def check_pages(store,web,urls,now):
             elif r.status_code>=400:issues.append(issue('http_error',url,'red' if url in priority else 'yellow',f'Confirmed HTTP {r.status_code}',rec['checked_at']))
             if 'noindex' in directives.lower():issues.append(issue('noindex',url,'red' if url in priority else 'yellow',directives,rec['checked_at']))
             if robots and not rec['googlebot_allowed']:issues.append(issue('robots_blocked',url,'red' if url in priority else 'yellow','Googlebot blocked by robots.txt',rec['checked_at']))
-            if '//' in urlsplit(url).path:issues.append(issue('double_slash',url,'yellow','Raw sitemap path contains //',rec['checked_at']))
+            if '//' in urlsplit(url).path:issues.append(issue('double_slash',url,'yellow','URL path contains //; discovered via '+rec['discovery_source'],rec['checked_at']))
             if rec['canonical'] and rec['canonical']!=url:issues.append(issue('canonical_mismatch',url,'yellow',rec['canonical'],rec['checked_at']))
             if r.status_code==200 and soup and not canonical:issues.append(issue('canonical_missing',url,'yellow','No HTML canonical element',rec['checked_at']))
         except Exception as exc:
@@ -119,7 +122,9 @@ def check_pages(store,web,urls,now):
         records.append(rec)
         time.sleep(.1)
     store.upsert('Technical Checks',records)
+    origins_by_url={r['url']:r.get('discovery_source','unknown') for r in records}
     for f in issues:
+        f['discovery_source']=origins_by_url.get(f['url'],'unknown')
         if f['url'] in planned and f['kind'] in ('http_error','noindex','robots_blocked'):
             f['severity']='observe';f['evidence']={'detail':f['evidence'],'context':'Page register explicitly marks this URL not yet launched; verify launch intent before escalating.'}
     store.set('Technical Findings',issues)

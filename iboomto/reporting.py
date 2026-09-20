@@ -38,7 +38,7 @@ def reconcile_issues(report,findings,checked,store=None):
         if store is not None:f['source_link']=store.link(f.get('source',''))
         prior=old.get(f['id'],{});active.add(f['id'])
         is_new_evidence=str(prior.get('last_seen',''))<str(f['observed_at'])
-        state='new' if not prior or prior.get('state')=='resolved' else 'persistent'
+        state='new' if not prior or prior.get('state') in ('resolved','historical','needs_recheck') else 'persistent'
         if prior and prior.get('severity')!=f['severity']:state='changed'
         if prior and not is_new_evidence:continue
         old[f['id']]={**f,'state':state,'first_seen':prior.get('first_seen',f['observed_at']),'last_seen':f['observed_at'],'resolved_at':''}
@@ -59,6 +59,9 @@ def reconcile_issues(report,findings,checked,store=None):
         r['priority']='P1' if r.get('severity')=='red' and r.get('kind') in ('http_error','noindex','robots_blocked','collection_failed') else 'P2' if r.get('severity') in ('yellow','red') else 'P3'
         r['priority_reason']='关键页面或核心采集中断' if r['priority']=='P1' else '有证据的局部错误或指标异常' if r['priority']=='P2' else '观察与机会'
         if store is not None:r['source_link']=store.link(r.get('source',''))
+    if store is not None:
+        from .issue_freshness import retire_stale
+        retire_stale(list(old.values()),store)
     report.set('Issues',list(old.values()),headers=['id','kind','url','severity','state','first_seen','last_seen','resolved_at','source','evidence'])
     return list(old.values())
 
@@ -66,7 +69,8 @@ def evidence(store,statuses,issues,kind='daily'):
     from .core import gsc_final_row
     from .sf_freshness import fresh_batches,report_issue_allowed
     sf=fresh_batches(store)
-    issues=[r for r in issues if report_issue_allowed(r,sf)]
+    from .issue_freshness import current_issue
+    issues=[r for r in issues if current_issue(r,store)]
     statuses=[({'source':'Screaming Frog','status':'skipped_stale_or_missing'} if r.get('source')=='Screaming Frog' and not sf else r) for r in statuses]
     period='weekly' if kind.startswith('weekly') else 'monthly' if kind=='monthly' else 'daily'
     latest=[];coverage=[];details={}
