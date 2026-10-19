@@ -7,6 +7,11 @@ from .storage import request, ApiFailure
 
 GA_METRICS=['sessions','activeUsers','totalUsers','newUsers','engagedSessions','engagementRate','averageSessionDuration','keyEvents']
 
+class InspectionFailure(ApiFailure):
+    def __init__(self, status_code):
+        self.status_code = status_code
+        super().__init__(f'URL Inspection HTTP {status_code}')
+
 def metric_changed(before,after,keys):
     for k in keys:
         a,b=before.get(k),after.get(k)
@@ -83,7 +88,7 @@ class Analytics:
 
     def inspection(self,url):
         r=self.s.post('https://searchconsole.googleapis.com/v1/urlInspection/index:inspect',json={'inspectionUrl':url,'siteUrl':'sc-domain:iboomto.com','languageCode':'en-US'},timeout=(10,20))
-        if r.status_code!=200:raise ApiFailure(f'URL Inspection HTTP {r.status_code}')
+        if r.status_code!=200:raise InspectionFailure(r.status_code)
         return r.json().get('inspectionResult',{})
 
 def ga_filter(exact='',prefix=''):

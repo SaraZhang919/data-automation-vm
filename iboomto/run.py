@@ -16,6 +16,7 @@ from .seo import seo_findings
 from .pages import priority_urls
 from .inspection import select_inspection_urls
 from .inspection_history import merge_observation, seed_observations
+from .inspection_execution import inspect_one as inspect_observation, provenance
 
 def main():
     p=argparse.ArgumentParser()
@@ -145,14 +146,8 @@ def main():
                     def inspect_one(u):
                         try:
                             if not hasattr(worker,'api'):worker.api=Analytics(google_session())
-                            result=worker.api.inspection(u)
-                            state=result.get('indexStatusResult',{})
-                            return {'id':u,'url':u,'checked_at':stamp(),'api_status':'success',
-                                'verdict':state.get('verdict',''),'coverage_state':state.get('coverageState',''),
-                                'last_crawl_time':state.get('lastCrawlTime',''),'google_canonical':state.get('googleCanonical',''),
-                                'user_canonical':state.get('userCanonical',''),'page_fetch_state':state.get('pageFetchState',''),
-                                'inspection_link':result.get('inspectionResultLink',''),'result':result}
-                        except Exception as e:return {'id':u,'url':u,'checked_at':stamp(),'api_status':'failed','error_type':type(e).__name__}
+                            return inspect_observation(worker.api,u,provenance(run_id))
+                        except Exception as e:return {'id':u,'url':u,'checked_at':stamp(),'api_status':'failed','error_type':type(e).__name__,**provenance(run_id)}
                     with ThreadPoolExecutor(max_workers=4) as pool:
                         for future in as_completed([pool.submit(inspect_one,u) for u in urls]):
                             current=future.result()

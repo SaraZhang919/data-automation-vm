@@ -32,9 +32,17 @@ def merge_observation(previous, current, basis='new_observation'):
     if current.get('api_status') == 'success':
         row['last_successful_checked_at'] = when
         row['error_type'] = ''
+        row['http_status'] = ''
     # Failed calls preserve previous index evidence and milestones; unknown
     # responses never masquerade as de-indexing or move the known-state clock.
     if state == 'unknown' or not when:
+        # Preserve the evidence supporting the last conclusive state, even when
+        # a successful API response contains an unspecified/unknown verdict.
+        if before in ('indexed', 'not_indexed'):
+            for field in ('verdict', 'coverage_state', 'last_crawl_time', 'google_canonical',
+                          'user_canonical', 'page_fetch_state', 'inspection_link', 'result'):
+                if field in previous:
+                    row[field] = previous[field]
         return row, None
     previous_observed_at = previous.get('index_state_observed_at', '')
     row['last_known_index_state'] = state
@@ -54,6 +62,8 @@ def merge_observation(previous, current, basis='new_observation'):
         'observation_basis': basis, 'verdict': current.get('verdict', ''),
         'coverage_state': current.get('coverage_state', ''),
         'meaning': 'Observed state only; not the actual Google indexing timestamp'}
+    if basis == 'new_observation':
+        event.update({key: current[key] for key in ('trigger_type', 'run_id', 'run_url') if key in current})
     return row, event
 
 

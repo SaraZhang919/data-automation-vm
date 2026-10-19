@@ -50,3 +50,39 @@ recovered. All stored timestamps are UTC ISO strings. Failed requests retain
 previous index evidence and milestones and do not create de-indexing events.
 No live Sheet rewrite is required before the scheduled run; ordinary storage
 preserves existing column positions and appends new columns.
+
+## Manual URL Inspection — iBoomto
+
+Open this workflow in GitHub Actions and choose **Run workflow** on `main`.
+Choose `all` or one of the nine languages. Optionally enter exact HTTPS URLs
+separated by commas/newlines, or a URL regex; these inputs are mutually exclusive.
+For example, choose `ja` and `/blog/|/how-to/` to inspect Japanese URLs in either
+path. Regex uses case-sensitive Python `re.search` against the full URL, after
+language filtering, and runs in an isolated process with a five-second deadline.
+
+Maximum 1,000 URLs per run. Leave both URLs and URL regex blank to inspect all known URLs in the selected language, or all languages if Language = all.
+
+The inventory is the deduplicated union of valid URLs in `Sitemap URLs`,
+`Page name - manual management`, and `URL Inspection`. It does not crawl the site.
+The summary reports source observation dates and missing timestamps; the manual
+register has no observation timestamp. More than 1,000 matches are rejected,
+without truncation. Exact URLs must use `https://www.iboomto.com`, with no query
+string or fragment, and must agree with the selected language.
+
+Manual checks bypass rotation and cooldowns. They use the same credentials,
+request pacing, four-request concurrency limit and Sheets-writer concurrency
+group as scheduled collection. They run only URL Inspection and operational
+logging. Google returns its current known indexed state; this is not a live-page
+test or an indexing submission. There is no date selector.
+
+New manual and scheduled observations include `trigger_type`, `run_id`, and
+`run_url`. New baseline/transition history entries include the same provenance;
+retained historical baselines leave provenance unknown. Latest attempts replace
+the URL's current row while failures preserve successful evidence and milestones.
+Unchanged observations and failed requests do not append history entries.
+
+HTTP 401/403/429 stops new dispatch; already-running responses are retained, and
+unchecked URLs are listed. Failed or incomplete runs exit unsuccessfully. Results
+are checkpointed to a per-run JSON artifact, with a GitHub summary containing
+selection criteria, counts, details and the workbook link. `Run Status` and
+`API Usage` record the run. Stored timestamps use UTC; summary timestamps use JST.
