@@ -41,6 +41,16 @@ AI Traffic Sources is the editable source mapping used by the AI-referral collec
 
 ## Reports and comparisons
 
+`GA4 Referral` contains the top 30 session sources by sessions for each language
+and daily/weekly/monthly period, filtered to Session default channel group =
+Referral and the production hostname. Filter `period` to choose the time grain;
+`rank` is local to that language and period. Weeks/months are queried directly
+from GA4. `eventCount` includes all events; `keyEvents` includes marked key events.
+The existing monitor refreshes this tab alongside the other GA4 tables. To fill
+or refresh launch-to-date history alone, run **GA4 Referral backfill — iBoomto**.
+See [GA4_REFERRAL_POLICY.md](GA4_REFERRAL_POLICY.md) for metrics, missing-data
+handling, period definitions and retention.
+
 Overview, Weekly Overview and Monthly Overview update independently. Report History preserves issued versions; changed evidence generates a revision. Cached AI text never prevents current facts from refreshing. The report includes period-matched business-event metrics, channels/pages/query summaries, AI-referral traffic, comparisons and technical issues. P1 is critical-page/core-collection failure; P2 is a local SEO issue or adequately supported mature-metric anomaly; P3 is observation/opportunity. LLM explains evidence and priority, not invented causality.
 
 Comparisons exists immediately, with unavailable reasons until a compatible baseline exists. Day-over-day and same-weekday gates are independent. Missing data is not zero; zero baselines are new_activity. First full week is September 13–19; two full weeks finish September 26. September is a partial launch month.
