@@ -17,6 +17,7 @@ from .pages import priority_urls
 from .inspection import select_inspection_urls
 from .inspection_history import merge_observation, seed_observations
 from .inspection_execution import inspect_one as inspect_observation, provenance
+from .referral import collect_referral
 
 def main():
     p=argparse.ArgumentParser()
@@ -75,6 +76,8 @@ def main():
             def run_period(prop=prop,key=key):
                 result=collect_ga(api,store,prop,start,end,now,kind) if source=='GA4' else collect_gsc(api,store,start,end,kind)
                 if source=='GA4':
+                    if kind in ('weekly','monthly'):
+                        collect_referral(api,store,prop,start,end,now,kind)
                     collect_business_events(api,store,prop,start,end,now,kind)
                     collect_ai_traffic(api,store,prop,start,end,now,kind)
                 store.upsert('Period Status',[{'id':key,'source':source,'property':prop['id'],'period':kind,'start':str(start),'end':str(end),'status':result['status'],'updated_at':stamp()}])
@@ -101,7 +104,9 @@ def main():
                         start,end=daily_window(now,api.ga_timezone(prop['id']))
                         if args.start:start=max(LAUNCH,date.fromisoformat(args.start))
                         if args.end:end=date.fromisoformat(args.end)
-                        return collect_ga(api,store,prop,start,end,now)
+                        result=collect_ga(api,store,prop,start,end,now)
+                        result['referral']=collect_referral(api,store,prop,start,end,now)
+                        return result
                     task('GA4 '+prop['language'],ga_job)
                     def business_job(prop=prop):
                         start,end=daily_window(now,api.ga_timezone(prop['id']))

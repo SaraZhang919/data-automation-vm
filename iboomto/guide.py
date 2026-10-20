@@ -16,6 +16,7 @@ DESCRIPTIONS={
  'AI Traffic Sources':('人工配置','AI 引荐来源映射。程序按 priority 读取启用的 pattern，匹配 GA4 sessionSource；可新增来源或禁用误报，mapping_version 会进入数据记录。'),
  'GA4 AI Traffic':('主要数据','AI 引荐流量分段。总行 row_type=total 由 GA4 AI 来源过滤直接查询，source 行按域名拆分；sessions 已包含在 GA4 Site，不可再次加总。日/周/月均直接查询对应周期。'),
  'GA4 Landing Pages':('主要数据','会话入口页，不是全部页面 PV。按语言 Top30 Organic active users + 全部人工 URL；周/月保留上期 Top30。page_url 无参数。'),
+ 'GA4 Referral':('主要数据','每语言、每天/周/月按sessions排名前30的sessionSource；Session default channel group精确为Referral。周日–周六、自然月直接查API，用户不逐日相加。eventCount为全部事件，keyEvents为关键事件。无返回只记录覆盖状态，不虚构来源或补零。'),
  'GA4 Events':('事件数据','原始事件次数和触发用户，event_name 可筛选；software_download 及事件质量汇总进入 LLM，避免重复计算旧 dl_。'),
  'GA4 Business Events':('业务指标','software_download 次数、周期内去重触发用户、触发用户 / 同范围 totalUsers。无事件记录显示 waiting_for_event_data，指标留空。'),
  'GSC Pages':('主要数据','每语言 Top30 clicks + 人工 URL；名称类型来自人工表。不是全量页面，不能加总替代 GSC Site。'),
@@ -84,7 +85,7 @@ def update_guide(store,report=None):
     groups=[
         ('报告与行动',['Overview','Weekly Overview','Monthly Overview','Issues','Comparisons','Report History','Deep Analysis']),
         ('人工维护',['Properties','Page name - manual management','Site Event Logs - Manual','Event Mapping','AI Traffic Sources','Thresholds']),
-        ('流量与下载',['GA4 Site','GA4 Channels','GA4 AI Traffic','GA4 Landing Pages','GA4 Business Events','GA4 Events','GSC Site','GSC Pages','GSC Queries','Clarity Snapshots','Clarity Pages','Manual Results']),
+        ('流量与下载',['GA4 Site','GA4 Channels','GA4 AI Traffic','GA4 Referral','GA4 Landing Pages','GA4 Business Events','GA4 Events','GSC Site','GSC Pages','GSC Queries','Clarity Snapshots','Clarity Pages','Manual Results']),
         ('技术 SEO',['Technical Findings','Technical Checks','URL Inspection','SF Pages','SF Hreflang Issues','Sitemap URLs','Sitemap Sources','Sitemap Crawl Comparison','Sitemap History','Technical History']),
         ('数据质量',['Data Status','Run Status','GA4 Data Quality','Page Register Checks','Check Coverage','Period Status','Import Batches','Data Revisions']),
         ('系统与用量',['AI Usage','AI Run Usage','API Usage','Storage Status','Archive Config','Clarity Requests','AI Cache']),
