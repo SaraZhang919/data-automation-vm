@@ -29,13 +29,18 @@ def format_columns(sid,name,head,count,new_layout):
         if key in COUNTS or (name.startswith('Clarity') and (key.endswith(('_count','_sessions_base')) or key in ('total_sessions','total_bot_sessions','distinct_users','gsc_clicks','gsc_rank'))):fmt={'type':'NUMBER','pattern':'#,##0'}
         elif key in PERCENT or key.endswith('_session_rate') or key=='average_scroll_depth':fmt={'type':'PERCENT','pattern':'0.00%'}
         elif key in ('change_pp','drop_percentage_points'):fmt={'type':'NUMBER','pattern':'0.00" pp"'}
-        elif key in ('key_events_per_user','position','averageSessionDuration'):fmt={'type':'NUMBER','pattern':'0.00'}
+        elif key in ('key_events_per_user','position','averageSessionDuration','eventsPerSession'):fmt={'type':'NUMBER','pattern':'0.00'}
         if fmt:requests.append({'repeatCell':{'range':rg,'cell':{'userEnteredFormat':{'numberFormat':fmt}},'fields':'userEnteredFormat.numberFormat'}})
         if new_layout:
-            width=430 if key in ('page_url','original_url','url','source_link','inspection_link') else 240 if key in ('page_name','query','hostname_filter','coverage_state','session_source') else 160
+            width=430 if key in ('page_url','original_url','url','source_link','inspection_link','landing_page','event_page','aggregation_note') else 240 if key in ('page_name','query','hostname_filter','coverage_state','session_source','event_name') else 160
             requests.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':i,'endIndex':i+1},'properties':{'pixelSize':width},'fields':'pixelSize'}})
-    if new_layout and head and name.startswith(('GA4 ','GSC ','SF ','Sitemap','URL Inspection','Comparisons','Clarity Pages')):
+    if new_layout and head and name.startswith(('GA4 ','GSC ','SF ','Sitemap','URL Inspection','Comparisons','Clarity Pages','Event Check ')):
         requests.append({'setBasicFilter':{'filter':{'range':{'sheetId':sid,'startRowIndex':0,'endColumnIndex':len(head)}}}})
+    if new_layout and name.startswith('Event Check '):
+        for key in ('aggregation_note', 'landing_page', 'event_page'):
+            if key in head:
+                index=head.index(key)
+                requests.append({'repeatCell':{'range':{'sheetId':sid,'startRowIndex':1,'endRowIndex':max(2,count+1),'startColumnIndex':index,'endColumnIndex':index+1},'cell':{'userEnteredFormat':{'wrapStrategy':'WRAP'}},'fields':'userEnteredFormat.wrapStrategy'}})
     if new_layout and name.endswith('Guide'):
         for i,width in enumerate((140,250,960,380)):
             requests.append({'updateDimensionProperties':{'range':{'sheetId':sid,'dimension':'COLUMNS','startIndex':i,'endIndex':i+1},'properties':{'pixelSize':width},'fields':'pixelSize'}})

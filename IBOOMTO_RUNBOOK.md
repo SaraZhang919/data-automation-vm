@@ -95,6 +95,55 @@ Daily/weekly/monthly LLM evidence contains only the latest overall snapshot and 
 Reference: https://learn.microsoft.com/en-us/clarity/setup-and-installation/clarity-data-export-api
 
 Actions mode report-only regenerates analysis from existing stored facts without rerunning source APIs. It is suitable after enabling LLM or refining report formatting.
+## On-demand Event Check (2026-10-22)
+
+Open **Actions → Event Check — iBoomto → Run workflow** on `main`. Start and end dates
+are inclusive `YYYY-MM-DD`; use the same date for a one-day report. Choose one website
+language or `all` (the default). Blank event names or `all` requests every returned event.
+Otherwise enter names/fragments separated by `|`. `exact` matches complete,
+case-sensitive names; `contains` matches literal fragments case-insensitively with OR
+logic. Example: `download|install` with `contains` keeps each matching complete event
+name separate. No regular expressions are evaluated.
+
+Results go to the existing data workbook:
+
+- **Event Check Summary**: whole-range metrics per event and language. Selecting `all`
+  also creates an `all` row for each event, automatically summing eventCount,
+  activeUsers and sessions across all nine properties. Aggregate eventsPerSession is
+  summed eventCount / summed sessions, never the sum or average of language rates.
+- **Event Check Landing Pages**: the same event metrics grouped by the first page of
+  the session (`landingPage`).
+- **Event Check Event Pages**: grouped by the URL where the event fired (`pageLocation`),
+  preserving query strings and missing/`(not set)` page values.
+
+Each view queries GA4 independently for the whole selected range; page rows are never
+added to produce summary users. All channels are included, with hostname exactly
+`www.iboomto.com`. Language means the property configured in Properties, not browser
+language or a new page-path filter. Date boundaries use each property's timezone.
+All-language activeUsers and sessions are **property sums**, not deduplicated people
+or sessions across languages. Metadata records languages queried and languages that
+returned each event; absent/suppressed data is not estimated. Recent dates are
+provisional; future dates are rejected and sampling/threshold warnings are retained.
+
+Reruns refresh matching property/date-range/event/view rows without duplicates;
+other events and ranges remain. An all-event rerun refreshes the complete matching
+range. A single-language run leaves existing `all` rows unchanged, including their
+original collection time. All three property views must succeed before its results
+are replaced. If any language fails during an all-language run, prior aggregate
+metrics remain with `data_status=refresh_failed`; no fresh partial total is published.
+Run Status and the Actions summary identify failures. Empty results record
+`no_data_returned` with blank metrics; zero sessions leave an aggregate rate blank.
+
+No scheduled trigger, baseline comparison, AI analysis or alerts are added. The workflow
+uses the existing Sheets-writer concurrency group. Runtime audit and report links are
+available in the Actions summary and `event-check` artifact.
+
+Local example (omit `--write` to collect and inspect without modifying Sheets):
+
+```powershell
+python -m iboomto.event_check --start 2026-10-15 --end 2026-10-20 --language all --event-names 'download|install' --event-match contains --env-file ../.env.local --write
+```
+
 # Workbook preservation update — 2026-09-10
 
 - Existing Guide tabs are user-owned, including case variants such as `使用指南guide`. Scheduled jobs never rebuild them. Edit specific guide cells only for an explicit documentation update, preserving notes and layout.

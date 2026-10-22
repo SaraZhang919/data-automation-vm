@@ -42,7 +42,14 @@ class Analytics:
         rows=[]; meta={}
         while True:
             data=request(self.s,'POST',f'https://analyticsdata.googleapis.com/v1beta/properties/{pid}:runReport',json=body).json()
-            meta=data.get('metadata',{})
+            page_meta=data.get('metadata',{})
+            # Quality warnings on an earlier page must survive pagination.
+            for key,value in page_meta.items():
+                if key in ('subjectToThresholding','dataLossFromOtherRow'):
+                    meta[key]=bool(meta.get(key)) or bool(value)
+                elif key=='samplingMetadatas':
+                    meta[key]=meta.get(key,[])+[item for item in value if item not in meta.get(key,[])]
+                else:meta[key]=value
             for r in data.get('rows',[]):
                 row={k:v['value'] for k,v in zip(dimensions,r.get('dimensionValues',[]))}
                 row.update({k:float(v['value']) for k,v in zip(metrics,r.get('metricValues',[]))})
