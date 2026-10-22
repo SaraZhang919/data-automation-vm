@@ -16,6 +16,33 @@ on:
         type: choice
         options: [all, en, ar, ja, zh-tw, es, de, fr, it, pt]
         default: all
+      session_channel:
+        description: Session default channel group (all includes every channel)
+        type: choice
+        default: all
+        options:
+          - all
+          - Organic Search
+          - Direct
+          - Referral
+          - Organic Social
+          - Paid Search
+          - Paid Social
+          - Email
+          - AI Assistant
+          - Unassigned
+          - Cross-network
+          - Display
+          - Affiliates
+          - Organic Shopping
+          - Organic Video
+          - Paid Shopping
+          - Paid Video
+          - Paid Other
+          - Audio
+          - SMS
+          - Mobile Push Notifications
+          - (not set)
       event_names:
         description: Names/fragments separated by spaces, commas or |; blank or all includes every event
         type: string
@@ -54,6 +81,7 @@ jobs:
           INPUT_START: ${{ inputs.start_date }}
           INPUT_END: ${{ inputs.end_date }}
           INPUT_LANGUAGE: ${{ inputs.language }}
+          INPUT_CHANNEL: ${{ inputs.session_channel }}
           INPUT_EVENT_NAMES: ${{ inputs.event_names }}
           INPUT_EVENT_MATCH: ${{ inputs.event_match }}
         run: python -m iboomto.event_check --write

@@ -105,6 +105,16 @@ case-sensitive names; `contains` matches literal fragments case-insensitively wi
 logic. Example: `download|install` with `contains` keeps each matching complete event
 name separate. No regular expressions are evaluated.
 
+**Session default channel group** defaults to `all`. Select one GA4 channel, such as
+Organic Search, Direct, Referral, Organic Social, Paid Search, or AI Assistant, to
+apply an exact `sessionDefaultChannelGroup` filter to all three report views.
+This uses the session's acquisition channel. All-language totals use the same chosen
+channel in every property. The `channel` column identifies each report's selection;
+channel-specific rows coexist with all-channel rows and reruns refresh only the
+chosen channel. Historical rows are labelled `all`, keeping their existing IDs.
+Existing columns stay in place; the channel column appends to existing tabs and is
+included in their filters without changing active filter criteria.
+
 Results go to the existing data workbook:
 
 - **Event Check Summary**: whole-range metrics per event and language. Selecting `all`
@@ -117,7 +127,7 @@ Results go to the existing data workbook:
   preserving query strings and missing/`(not set)` page values.
 
 Each view queries GA4 independently for the whole selected range; page rows are never
-added to produce summary users. All channels are included, with hostname exactly
+added to produce summary users. The selected session channel is applied, with hostname exactly
 `www.iboomto.com`. Language means the property configured in Properties, not browser
 language or a new page-path filter. Date boundaries use each property's timezone.
 All-language activeUsers and sessions are **property sums**, not deduplicated people
@@ -145,7 +155,7 @@ still saves the collection audit and write error in the runtime artifact.
 Local example (omit `--write` to collect and inspect without modifying Sheets):
 
 ```powershell
-python -m iboomto.event_check --start 2026-10-15 --end 2026-10-20 --language all --event-names 'download|install' --event-match contains --env-file ../.env.local --write
+python -m iboomto.event_check --start 2026-10-15 --end 2026-10-20 --language all --event-names 'download|install' --event-match contains --channel 'Organic Search' --env-file ../.env.local --write
 ```
 
 # Workbook preservation update — 2026-09-10

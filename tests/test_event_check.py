@@ -9,9 +9,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from iboomto.analytics import Analytics
-from iboomto.core import LANGS, LAUNCH
-from iboomto.event_check import (METRICS, SUMMARY, VIEWS, Selection, aggregate,
-    fetch_property, headers, main, replace_results, run_check)
+from iboomto.core import LANGS, LAUNCH, digest
+from iboomto.event_check import (CHANNELS, METRICS, SUMMARY, VIEWS, Selection, aggregate,
+    extend_report_filters, fetch_property, headers, main, replace_results, run_check)
 from iboomto.layout import format_columns
 from iboomto.storage import ApiFailure, Sheets
 
@@ -42,7 +42,8 @@ def api_for(events=('software_download',), failed=None, metadata=None):
             raise RuntimeError('transport error')
         rows = []
         for event in events:
-            selection = filters['andGroup']['expressions'][1:]
+            selection = [expression for expression in filters['andGroup']['expressions'][1:]
+                         if 'orGroup' in expression or expression.get('filter', {}).get('fieldName') == 'eventName']
             if selection:
                 expression = selection[0]
                 if 'orGroup' in expression:
@@ -69,6 +70,84 @@ def api_for(events=('software_download',), failed=None, metadata=None):
 
 
 class EventCheckTests(unittest.TestCase):
+    def test_session_channel_filter_is_exact_and_applies_to_all_views(self):
+        api = api_for()
+        fetch_property(api, PROPS[0], START, END, NOW,
+                       Selection.parse('download|install', 'contains'), 'run', 'Organic Search')
+        for call in api.ga.call_args_list:
+            expressions = call.args[5]['andGroup']['expressions']
+            self.assertEqual(len(expressions), 3)
+            self.assertIn('orGroup', expressions[1])
+            self.assertEqual(expressions[2], {'filter': {
+                'fieldName': 'sessionDefaultChannelGroup', 'stringFilter': {
+                    'matchType': 'EXACT', 'value': 'Organic Search', 'caseSensitive': True}}})
+        self.assertEqual(len(Selection().filters('all')['andGroup']['expressions']), 1)
+        self.assertIn('AI Assistant', CHANNELS)
+        with self.assertRaises(ValueError):
+            run_check(api, MemoryStore(), PROPS, START, END, Selection(), NOW, 'run', channel='unknown')
+
+    def test_channel_scopes_coexist_and_legacy_all_ids_are_preserved(self):
+        store = MemoryStore()
+        run_check(api_for(), store, PROPS, START, END, Selection(), NOW, 'legacy')
+        original_ids = {tab: {row['id'] for row in store.read(tab)} for tab in VIEWS}
+        for tab in VIEWS:
+            for row in store.read(tab):
+                row.pop('channel')  # Historical reports had no channel column.
+        run_check(api_for(), store, PROPS, START, END, Selection(), NOW, 'organic', channel='Organic Search')
+        for tab in VIEWS:
+            all_rows = [row for row in store.read(tab) if row['channel'] == 'all']
+            self.assertEqual({row['id'] for row in all_rows}, original_ids[tab])
+            self.assertTrue(all(row['run_id'] == 'legacy' for row in all_rows))
+            self.assertEqual(len(all_rows), len([row for row in store.read(tab) if row['channel'] == 'Organic Search']))
+        legacy_id = digest(['event-check-v1', SUMMARY, '100', str(START), str(END), 'software_download', ''])
+        self.assertIn(legacy_id, original_ids[SUMMARY])
+        run_check(api_for(), store, PROPS, START, END, Selection(), NOW, 'organic-again', channel='Organic Search')
+        run_check(api_for(), store, PROPS, START, END, Selection(), NOW, 'all-again')
+        self.assertEqual(len(store.read(SUMMARY)), 20)
+        for tab in VIEWS:
+            self.assertEqual(len(store.read(tab)), len({row['id'] for row in store.read(tab)}))
+        organic_total = next(row for row in store.read(SUMMARY) if row['channel']=='Organic Search' and row['language']=='all')
+        self.assertEqual(organic_total['eventCount'], 730)
+        self.assertAlmostEqual(organic_total['eventsPerSession'], 730 / 82)
+
+    def test_channel_failure_does_not_mark_other_channel_totals_failed(self):
+        store = MemoryStore()
+        run_check(api_for(), store, PROPS, START, END, Selection(), NOW, 'all')
+        report = run_check(api_for(failed=('100', ('eventName',))), store, PROPS,
+                           START, END, Selection(), NOW, 'failed-organic', channel='Organic Search')
+        self.assertEqual(report['channel'], 'Organic Search')
+        totals = [row for row in store.read(SUMMARY) if row['language']=='all']
+        self.assertEqual(next(row for row in totals if row['channel']=='all')['data_status'], 'returned')
+        self.assertEqual(next(row for row in totals if row['channel']=='Organic Search')['data_status'], 'refresh_failed')
+        mixed = [fetch_property(api_for(), prop, START, END, NOW, Selection(), 'mixed') for prop in PROPS]
+        mixed[0][SUMMARY][0]['channel'] = 'Referral'
+        with self.assertRaises(ValueError):
+            aggregate(mixed, START, END, Selection(), 'mixed')
+
+    def test_appended_channel_column_extends_filter_and_preserves_user_criteria(self):
+        store = Mock()
+        store.base = 'https://sheets.googleapis.com/v4/spreadsheets/test'
+        store.headers = {SUMMARY: headers(SUMMARY)}
+        basic = {'range': {'sheetId': 1, 'startRowIndex': 0, 'endColumnIndex': len(headers(SUMMARY))-1},
+                 'filterSpecs': [{'columnIndex': 4, 'filterCriteria': {'hiddenValues': ['en']}}],
+                 'criteria': {'4': {'hiddenValues': ['en']}},
+                 'sortSpecs': [{'dimensionIndex': 0, 'sortOrder': 'ASCENDING'}]}
+        meta = {'sheets': [{'properties': {'title': SUMMARY}, 'basicFilter': basic},
+                           {'properties': {'title': 'Properties'}, 'basicFilter': basic}]}
+        with patch('iboomto.storage.request', return_value=Mock(json=lambda: meta)) as request:
+            extend_report_filters(store)
+        body = request.call_args.kwargs['json']['requests']
+        self.assertEqual(len(body), 1)
+        updated = body[0]['setBasicFilter']['filter']
+        self.assertEqual(updated['filterSpecs'], basic['filterSpecs'])
+        self.assertEqual(updated['sortSpecs'], basic['sortSpecs'])
+        self.assertEqual(updated['range']['endColumnIndex'], len(headers(SUMMARY)))
+        self.assertEqual(basic['range']['endColumnIndex'], len(headers(SUMMARY))-1)
+        meta['sheets'][0]['basicFilter'] = updated
+        with patch('iboomto.storage.request', return_value=Mock(json=lambda: meta)) as request:
+            extend_report_filters(store)
+        self.assertEqual(request.call_count, 1)  # An unchanged filter needs only the read.
+
     def test_exact_and_contains_filters_and_literal_or_matching(self):
         exact = Selection.parse('software_download|software_download')
         self.assertTrue(exact.matches('software_download'))
