@@ -100,7 +100,7 @@ Actions mode report-only regenerates analysis from existing stored facts without
 Open **Actions → Event Check — iBoomto → Run workflow** on `main`. Start and end dates
 are inclusive `YYYY-MM-DD`; use the same date for a one-day report. Choose one website
 language or `all` (the default). Blank event names or `all` requests every returned event.
-Otherwise enter names/fragments separated by `|`. `exact` matches complete,
+Otherwise enter names/fragments separated by `|`, commas, or whitespace. `exact` matches complete,
 case-sensitive names; `contains` matches literal fragments case-insensitively with OR
 logic. Example: `download|install` with `contains` keeps each matching complete event
 name separate. No regular expressions are evaluated.
@@ -137,6 +137,10 @@ Run Status and the Actions summary identify failures. Empty results record
 No scheduled trigger, baseline comparison, AI analysis or alerts are added. The workflow
 uses the existing Sheets-writer concurrency group. Runtime audit and report links are
 available in the Actions summary and `event-check` artifact.
+
+Filtered-out rows are supported when extending report tabs: source formats are read
+and repeated onto new rows without changing the user's filters. A failed Sheets write
+still saves the collection audit and write error in the runtime artifact.
 
 Local example (omit `--write` to collect and inspect without modifying Sheets):
 

@@ -68,6 +68,31 @@ def col(n):
         n, r = divmod(n-1,26); out = chr(65+r)+out
     return out
 
+
+def inherited_formats(session, base, name, sid, source_row, end_row, width):
+    """Repeat source cell formats; copyPaste rejects filtered-out rows."""
+    escaped = name.replace("'", "''")
+    source = f"'{escaped}'!A{source_row+1}:{col(width)}{source_row+1}"
+    data = request(session, 'GET', base, params={
+        'ranges': source, 'fields': 'sheets(data(rowData(values(userEnteredFormat))))'}).json()
+    sheets = data.get('sheets', [])
+    grids = sheets[0].get('data', []) if sheets else []
+    rows = grids[0].get('rowData', []) if grids else []
+    cells = rows[0].get('values', []) if rows else []
+    formats = [cells[i].get('userEnteredFormat', {}) if i < len(cells) else {} for i in range(width)]
+    requests = []
+    start = 0
+    while start < width:
+        end = start + 1
+        while end < width and formats[end] == formats[start]:
+            end += 1
+        requests.append({'repeatCell': {
+            'range': {'sheetId': sid, 'startRowIndex': source_row+1, 'endRowIndex': end_row,
+                      'startColumnIndex': start, 'endColumnIndex': end},
+            'cell': {'userEnteredFormat': formats[start]}, 'fields': 'userEnteredFormat'}})
+        start = end
+    return requests
+
 class Sheets:
     def link(self,name):
         sid=self.tabs.get(name,{}).get('sheetId')
@@ -173,8 +198,7 @@ class Sheets:
                 # Existing sheets are values-only: widths, hidden flags, freeze panes,
                 # number formats, notes and guide annotations belong to the user.
                 if len(rows)+1>len(prior) and len(prior)>1:
-                    formats.append({'copyPaste':{'source':{'sheetId':sid,'startRowIndex':len(prior)-1,'endRowIndex':len(prior),'startColumnIndex':0,'endColumnIndex':len(prior[0])},
-                        'destination':{'sheetId':sid,'startRowIndex':len(prior),'endRowIndex':len(rows)+1,'startColumnIndex':0,'endColumnIndex':len(prior[0])},'pasteType':'PASTE_FORMAT'}})
+                    formats.extend(inherited_formats(self.s,self.base,name,sid,len(prior)-1,len(rows)+1,len(prior[0])))
                 continue
             formats.extend([
                 {"repeatCell":{"range":{"sheetId":sid,"startRowIndex":0,"endRowIndex":1},"cell":{"userEnteredFormat":{"backgroundColor":{"red":.10,"green":.20,"blue":.30},"textFormat":{"bold":True,"foregroundColor":{"red":1,"green":1,"blue":1}},"wrapStrategy":"WRAP"}},"fields":"userEnteredFormat"}},

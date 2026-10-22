@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -36,9 +37,9 @@ class Selection:
             raise ValueError('Event match must be exact or contains.')
         if not value.strip() or value.strip().lower() == 'all':
             return cls((), match)
-        terms = [part.strip() for part in value.split('|') if part.strip()]
+        terms = [part for part in re.split(r'[|,\s]+', value.strip()) if part]
         if not terms or any(term.lower() == 'all' for term in terms):
-            raise ValueError('Use all alone, or provide event names separated by |.')
+            raise ValueError('Use all alone, or separate event names with |, commas, or spaces.')
         if match == 'contains':
             terms = [term.lower() for term in terms]
         return cls(tuple(sorted(set(terms))), match)
@@ -129,8 +130,14 @@ def partition(row, language, start, end, selection):
         return False
     if row.get('event_name'):
         return selection.matches(row['event_name'])
-    return (not selection.terms or
-            (row.get('event_match') == selection.match and row.get('event_filter') == selection.label))
+    if not selection.terms:
+        return True
+    if row.get('event_match') != selection.match:
+        return False
+    try:
+        return Selection.parse(str(row.get('event_filter', '')), selection.match).terms == selection.terms
+    except ValueError:
+        return False
 
 
 def replace_results(store, staged, language, start, end, selection):
@@ -255,21 +262,32 @@ def main():
         load_local_env(args.env_file)
     from .analytics import Analytics
     from .api_usage import METER
-    from .storage import Sheets, google_session
+    from .storage import ApiFailure, Sheets, google_session
     run_id = os.environ.get('GITHUB_RUN_ID') or digest(stamp())
     METER.reset(run_id)
     session = google_session()
     store = Sheets(session, os.environ.get('IBOOMTO_SHEET_ID') or DATA_ID, args.write)
     report = run_check(Analytics(session), store, parse_properties(store.read('Properties')),
                        start, end, selection, datetime.now(timezone.utc), run_id, args.language)
-    store.upsert('API Usage', METER.rows())
-    store.flush()
-    report['links'] = {tab: store.link(tab) for tab in VIEWS}
-    report['api_usage'] = METER.rows()
     report['writes_enabled'] = args.write
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
+    report['write_status'] = 'pending' if args.write else 'dry_run'
+    # Keep collection evidence even if a later Sheets write fails.
     output.write_text(json.dumps(report, indent=2), encoding='utf-8')
+    try:
+        store.upsert('API Usage', METER.rows())
+        store.flush()
+        report['write_status'] = 'success' if args.write else 'dry_run'
+    except Exception as exc:
+        report['status'] = 'failed'
+        report['write_status'] = 'failed'
+        report['write_error'] = {'error_type': type(exc).__name__,
+                                 'message': str(exc) if isinstance(exc, (ApiFailure, ValueError)) else 'Sheets write failed; see run audit.'}
+    finally:
+        report['links'] = {tab: store.link(tab) for tab in VIEWS}
+        report['api_usage'] = METER.rows()
+        output.write_text(json.dumps(report, indent=2), encoding='utf-8')
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as handle:
             handle.write('## Event Check — iBoomto\n\n')
@@ -279,7 +297,9 @@ def main():
             handle.write('\n' + TOTAL_NOTE + '\n')
             if report['failed_languages']:
                 handle.write('\nFailed languages: ' + ', '.join(report['failed_languages']) + '\n')
-    print(json.dumps({key: report[key] for key in ('status', 'rows', 'links')}), flush=True)
+            if report.get('write_error'):
+                handle.write('\nSheets write failed: ' + report['write_error']['message'] + '\n')
+    print(json.dumps({key: report[key] for key in ('status', 'write_status', 'rows', 'links', 'write_error') if key in report}), flush=True)
     return 1 if report['status'] == 'failed' else 0
 
 

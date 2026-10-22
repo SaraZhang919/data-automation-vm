@@ -17,7 +17,7 @@ on:
         options: [all, en, ar, ja, zh-tw, es, de, fr, it, pt]
         default: all
       event_names:
-        description: Event names or fragments separated by |; blank or all includes every event
+        description: Names/fragments separated by spaces, commas or |; blank or all includes every event
         type: string
         default: all
       event_match:
@@ -46,6 +46,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements-iboomto.txt
       - run: python -m unittest discover -s tests -p 'test_event_check.py' -v
+      - run: python -m unittest discover -s tests -p 'test_storage_formatting.py' -v
       - name: Query events and write all three report views
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}

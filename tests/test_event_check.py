@@ -1,14 +1,19 @@
 import copy
+import json
+import os
+import sys
+import tempfile
 import unittest
 from datetime import date, datetime, timezone
-from unittest.mock import Mock
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 from iboomto.analytics import Analytics
 from iboomto.core import LANGS, LAUNCH
 from iboomto.event_check import (METRICS, SUMMARY, VIEWS, Selection, aggregate,
-    fetch_property, headers, replace_results, run_check)
+    fetch_property, headers, main, replace_results, run_check)
 from iboomto.layout import format_columns
-from iboomto.storage import Sheets
+from iboomto.storage import ApiFailure, Sheets
 
 START, END = date(2026, 10, 10), date(2026, 10, 16)
 NOW = datetime(2026, 10, 22, 8, tzinfo=timezone.utc)
@@ -83,6 +88,20 @@ class EventCheckTests(unittest.TestCase):
         for value in ('all|download', '|||'):
             with self.assertRaises(ValueError):
                 Selection.parse(value)
+
+    def test_spaces_and_commas_separate_multiple_events(self):
+        expected = Selection.parse('clickwin|clicktip', 'contains')
+        for value in ('clickwin clicktip', 'clickwin,clicktip', ' clickwin,\tclicktip\nclickwin '):
+            self.assertEqual(Selection.parse(value, 'contains'), expected)
+        store = MemoryStore()
+        # Older versions incorrectly queried this whole phrase and stored coverage.
+        legacy = Selection(('clickwin clicktip',), 'contains')
+        run_check(api_for(()), store, PROPS, START, END, legacy, NOW, 'old')
+        run_check(api_for(('clickwin_start', 'clicktip_done')), store, PROPS,
+                  START, END, Selection.parse('clickwin clicktip', 'contains'), NOW, 'new')
+        for tab in VIEWS:
+            self.assertTrue(all(row['data_status'] == 'returned' for row in store.read(tab)))
+            self.assertEqual({row['event_name'] for row in store.read(tab)}, {'clickwin_start', 'clicktip_done'})
 
     def test_direct_whole_range_queries_have_independent_page_dimensions(self):
         api = api_for()
@@ -235,6 +254,29 @@ class EventCheckTests(unittest.TestCase):
             rate = next(rule['repeatCell'] for rule in rules if 'repeatCell' in rule and
                         rule['repeatCell']['range']['startColumnIndex'] == index)
             self.assertEqual(rate['cell']['userEnteredFormat']['numberFormat'], {'type': 'NUMBER', 'pattern': '0.00'})
+
+    def test_write_failure_keeps_audit_artifact_and_summary(self):
+        store = MemoryStore()
+        store.cache['Properties'] = [{'Platform': 'GA', 'Language': p['language'], 'ID': p['id']} for p in PROPS]
+        store.flush = Mock(side_effect=ApiFailure('HTTP 400'))
+        store.link = Mock(return_value='https://docs.google.com/spreadsheets/d/test/edit')
+        result = {'status': 'success', 'failed_languages': [], 'statuses': [], 'rows': {SUMMARY: 1}}
+        runtime = Path(__file__).resolve().parent.parent / 'runtime'
+        runtime.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=runtime) as folder:
+            output = Path(folder) / 'audit.json'
+            summary = Path(folder) / 'summary.md'
+            argv = ['event-check', '--start', str(START), '--end', str(END), '--write', '--output', str(output)]
+            with patch.object(sys, 'argv', argv), patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}), \
+                    patch('iboomto.storage.google_session'), patch('iboomto.storage.Sheets', return_value=store), \
+                    patch('iboomto.event_check.run_check', return_value=result):
+                self.assertEqual(main(), 1)
+            audit = json.loads(output.read_text(encoding='utf-8'))
+            self.assertEqual(audit['status'], 'failed')
+            self.assertEqual(audit['write_status'], 'failed')
+            self.assertEqual(audit['write_error'], {'error_type': 'ApiFailure', 'message': 'HTTP 400'})
+            self.assertEqual(audit['rows'], {SUMMARY: 1})
+            self.assertIn('Sheets write failed: HTTP 400', summary.read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':
