@@ -1,12 +1,22 @@
 import unittest
-from datetime import datetime, timezone
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock, call, patch
 from test_monitor import MemoryStore
 from iboomto.technical import sf_import
-from iboomto.reporting import evidence
+from iboomto.reporting import evidence, reconcile_issues
 from iboomto.sf_freshness import fresh_date, fresh_batches
+from iboomto.issue_freshness import retire_stale
 
 NOW = datetime(2026, 9, 14, 8, tzinfo=timezone.utc)
+NAMES = ('internal_all.csv', 'inlinks.csv', 'hreflang_all.csv')
+
+
+def folder(day):
+    return {'id':day,'name':day,'mimeType':'application/vnd.google-apps.folder'}
+
+
+def files():
+    return [{'id':name,'name':name,'md5Checksum':name,'modifiedTime':'2026-09-13T07:00:00Z'} for name in NAMES]
 
 
 class SFFreshnessTests(unittest.TestCase):
@@ -16,15 +26,39 @@ class SFFreshnessTests(unittest.TestCase):
         for value in ('20260913', 'unknown', '20260915', ''):
             self.assertFalse(fresh_date(value, NOW))
 
-    def test_old_folder_not_downloaded_or_parsed(self):
+    def test_folders_older_than_the_saved_crawl_and_future_folders_are_not_downloaded(self):
         data = MemoryStore()
-        with patch('iboomto.technical.drive_list', return_value=[{'id':'old','name':'20260909','mimeType':'application/vnd.google-apps.folder'}]) as listing, patch('iboomto.technical.request') as request, patch('iboomto.technical.parse_csv') as parser:
+        data.set('Import Batches',[{'id':'saved','status':'success','batch_date':'20260912','crawl_timestamp':'2026-09-12 15:00:00','freshness_policy':'same-jst-day-v1'}])
+        with patch('iboomto.technical.drive_list', return_value=[folder('20260909'),folder('20260915')]) as listing, patch('iboomto.technical.request') as request:
             issues, status = sf_import(None, data, NOW)
         self.assertEqual(listing.call_count, 1)
         request.assert_not_called()
-        parser.assert_not_called()
         self.assertEqual(issues, [])
         self.assertEqual(status['status'], 'skipped_stale')
+        self.assertEqual(status['latest_batch'], '20260912')
+
+    def test_newest_complete_batch_catches_up_and_ages_from_crawl_day(self):
+        data = MemoryStore()
+        url = 'https://www.iboomto.com/a'
+        csvs = {
+            NAMES[0]:f'Address,Status Code,Content Type,Crawl Timestamp\n{url},500,text/html,2026-09-13 12:00:00\n',
+            NAMES[1]:'From,To\n',
+            NAMES[2]:'Address\n',
+        }
+        def download(_session, _method, url, **_kwargs):
+            return Mock(content=csvs[url.rsplit('/',1)[-1]].encode())
+        with patch('iboomto.technical.drive_list', side_effect=[
+            [folder('20260912'),folder('20260913'),folder('20260914')],
+            files()[:2],files(),files(),
+        ]) as listing, patch('iboomto.technical.request',side_effect=download):
+            issues, status = sf_import(None, data, NOW)
+        self.assertEqual(listing.call_args_list[1:], [call(None,'20260914'),call(None,'20260913'),call(None,'20260913')])
+        self.assertEqual((status['imported'],status['latest_crawl_date'],status['status']), (1,'2026-09-13','success'))
+        self.assertEqual(issues[0]['evidence']['crawl_timestamp'],'2026-09-13T12:00:00+09:00')
+        latest, = fresh_batches(data, NOW)
+        self.assertEqual(data.read('SF Pages')[0]['batch'],latest['id'])
+        self.assertEqual(retire_stale([{**issues[0],'state':'new'}],data,NOW)[0]['state'],'new')
+        self.assertEqual(retire_stale([{**issues[0],'state':'new'}],data,NOW+timedelta(days=1))[0]['state'],'historical')
 
     def test_stale_and_legacy_batches_excluded(self):
         data = MemoryStore()
@@ -82,3 +116,13 @@ class SFFreshnessTests(unittest.TestCase):
         self.assertTrue(report_issue_allowed({'source':'SF Pages','sf_batch':'new'},batches))
         self.assertTrue(report_issue_allowed({'kind':'sf_http_error','evidence':'{"batch":"new"}'},batches))
         self.assertFalse(report_issue_allowed({'source':'SF Pages','sf_batch':'old'},batches))
+
+    def test_revised_export_of_same_crawl_updates_issue_provenance(self):
+        report = MemoryStore()
+        row = {'id':'x','kind':'sf_http_error','url':'https://www.iboomto.com/a','source':'SF Pages',
+               'last_seen':'2026-09-13 12:00:00','state':'persistent','severity':'yellow',
+               'evidence':'{"batch":"previous"}'}
+        report.set('Issues', [row])
+        finding = {**row,'observed_at':'2026-09-13T12:00:00+09:00','evidence':{'batch':'revised'}}
+        updated, = reconcile_issues(report,[finding],[])
+        self.assertEqual(updated['evidence']['batch'],'revised')
