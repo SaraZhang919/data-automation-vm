@@ -7,7 +7,7 @@ Approved migration: 2026-09-09. Source data and Google Sheets calculations use P
 - [IBT - Website Data](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit)
 - [使用指南 Guide](https://docs.google.com/spreadsheets/d/1Iw07GRTmwK4GoE3zPpGYG-rdneBHchYIb6-s-knFLvs/edit#gid=1208128487): user-owned descriptions, definitions, scopes, schedules and tab links. Routine jobs preserve this guide; explicit documentation edits are applied only to selected cells.
 - [Daily / Weekly / Monthly Reports](https://docs.google.com/spreadsheets/d/15jBCSt2FqujGjm-L8-PFZTpkMCSDtJVKDl1rEANNNKU/edit)
-- [Screaming Frog raw uploads](https://drive.google.com/drive/folders/1QKOgh4aFtVM1CQqaqdwlVSklq8s4LiND): YYYYMMDD subfolders with internal_all.csv, inlinks.csv, hreflang_all.csv. Running the desktop crawl remains manual.
+- [Screaming Frog raw uploads](https://drive.google.com/drive/folders/1QKOgh4aFtVM1CQqaqdwlVSklq8s4LiND): YYYYMMDD subfolders named for the JST crawl start date, with internal_all.csv, inlinks.csv and hreflang_all.csv. Delayed runs can catch up without a new crawl. See [SF import and freshness](SF_FRESHNESS_POLICY.md).
 
 ## GA reconciliation — production hostname retained
 

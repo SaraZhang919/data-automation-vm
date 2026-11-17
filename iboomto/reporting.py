@@ -30,6 +30,7 @@ def metric_findings(store):
 
 
 def reconcile_issues(report,findings,checked,store=None):
+    from .sf_freshness import crawl_time,is_sf_issue,issue_batch
     old={r['id']:r for r in report.read('Issues')};active=set()
     for f in findings:
         level=f.get('severity','');kind=f.get('kind','')
@@ -38,6 +39,11 @@ def reconcile_issues(report,findings,checked,store=None):
         if store is not None:f['source_link']=store.link(f.get('source',''))
         prior=old.get(f['id'],{});active.add(f['id'])
         is_new_evidence=str(prior.get('last_seen',''))<str(f['observed_at'])
+        if prior and is_sf_issue(f):
+            previous,current=crawl_time(prior.get('last_seen')),crawl_time(f['observed_at'])
+            if previous and current:
+                batch=issue_batch(f)
+                is_new_evidence=current>previous or (current==previous and batch and batch!=issue_batch(prior))
         state='new' if not prior or prior.get('state') in ('resolved','historical','needs_recheck') else 'persistent'
         if prior and prior.get('severity')!=f['severity']:state='changed'
         if prior and not is_new_evidence:continue
@@ -67,7 +73,7 @@ def reconcile_issues(report,findings,checked,store=None):
 
 def evidence(store,statuses,issues,kind='daily'):
     from .core import gsc_final_row
-    from .sf_freshness import fresh_batches,report_issue_allowed
+    from .sf_freshness import fresh_batches
     sf=fresh_batches(store)
     from .issue_freshness import current_issue
     issues=[r for r in issues if current_issue(r,store)]
@@ -103,7 +109,7 @@ def evidence(store,statuses,issues,kind='daily'):
             'Users across properties, days, or pages are not globally additive. Weekly/monthly users come from full-period API queries.',
             'No event row means waiting for data, not proven zero downloads. software_download measures click intent, not completed installation.',
             'GSC uses finalized data. Query selection unions clicks Top100, impressions Top100 and up to 50 new/50 growing candidates from a maximum 5000-query pool per language/period. These are not full site totals. New means absent from the comparison pool, not proven first-ever appearance. Missing baselines are not zero.',
-            'Clarity uses rolling windows. SF evidence is included only from verified crawls on the current JST date; stale or missing SF is omitted, not healthy or resolved. A fresh SF snapshot is not a whole-week/month measurement. GA mature is a 48-hour policy, not a provider guarantee.',
+            'Clarity uses rolling windows. SF evidence comes only from the latest verified crawl dated today or yesterday in JST. Stale or missing evidence does not establish health or resolution. A fresh SF snapshot is not a whole-week/month measurement. GA mature is a 48-hour policy, not a provider guarantee.',
             'AI traffic is a GA4 sessionSource/sessionMedium segment. It is assigned before Referral in the custom channel view and is already included in GA4 Site sessions; do not add it again. Source attribution can be missing when AI clients strip referrers.']}
 
 
